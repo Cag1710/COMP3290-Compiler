@@ -1,0 +1,6 @@
+CD25 Exa
+main
+	i : integer
+begin
+	i = 10;
+end CD25 Exa

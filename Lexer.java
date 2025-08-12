@@ -6,6 +6,15 @@ public final class Lexer {
     private final PushbackReader in; // java class that reads characters one at a time from another reader
     private int line = 1; // starting on line 1
     private int col = 0; // starting at column 0
+    private int state;
+
+    // state constants for the state machine
+    private final int READY = 0;
+    private final int WORD = 1;
+    private final int DIGIT = 2;
+    private final int OP = 3;
+    private final int STRING = 4;
+    private final int COMMENT = 5;
 
     // the big 3 of the compiler world
     // the big keywords
@@ -84,7 +93,7 @@ public final class Lexer {
 
     public Lexer(Reader r) {
         this.in = new PushbackReader(new BufferedReader(r), 2); // wrapping wraps in wraps
-                                                                     // specifically, wraps the incoming reader in a bufferedreader for efficient reading, then wraps that in a pushbackreader with a buffer size of 2
+        this.state = READY;                                          // specifically, wraps the incoming reader in a bufferedreader for efficient reading, then wraps that in a pushbackreader with a buffer size of 2
                                                                      // allows us to push back tokens onto the buffer to be read next 
                                                                      // e.g. /==, read /, read =, read =. but /== isnt a token, push that last token onto the buffer as it probably starts the next token and process just /=
     }
@@ -109,13 +118,38 @@ public final class Lexer {
         return isLetter(c) || isDigit(c);
     }
 
-    public Token nextToken() throws IOException {
+    public Token nextToken() throws IOException {    
+        List<String> buff = new ArrayList<>();     // can use this to build the token (Eg: reading CD25. buff = ["C", "D", "2", "5"])
+        // loop until token is found or error
+
+        /*
+        * IF space
+        *      skip / delimit
+        * IF single token
+        *      return token
+        * IF character [a-z]
+        *      set state = WORD
+        *      ... determine keyword, iden etc.
+        * IF digit [0-9]
+        *      set state = DIGIT
+        *      ... determine integer, real
+        * IF operator
+        *      set state = OP
+        *      ... determine operator
+        * IF quote (")
+        *      set state = STRING
+        *      ... determine content
+        */
+
+        // just an example read and store in buff
+        int c = read();
+        buff.add(Character.toString(c));
+
         return null;
     }
 
     private int read() throws IOException {
-        int i = 1;
-        return i;
+        return in.read();
     }
 
     private void unread() throws IOException {

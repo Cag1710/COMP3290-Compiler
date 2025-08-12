@@ -83,6 +83,26 @@ public final class Lexer {
                                                                      // e.g. /==, read /, read =, read =. but /== isnt a token, push that last token onto the buffer as it probably starts the next token and process just /=
     }
 
+    // for skipping whitespace as defined by the assignment spec
+    private static boolean isSpace(int c) {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+    }
+
+    // to identify the start of keywords and identifiers
+    private static boolean isLetter(int c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+    }
+
+    // to identify integers or real literals
+    private static boolean isDigit(int c) {
+        return (c >= '0' && c <= '9');
+    }
+
+    // as identifiers can contain letters and digits this is needed 
+    private static boolean isLetterOrDigit(int c) {
+        return isLetter(c) || isDigit(c);
+    }
+
     public Token nextToken() throws IOException {
         return null;
     }

@@ -42,26 +42,32 @@ public final class Lexer {
         Map.entry("true", TokenType.TTRUE),
         Map.entry("false", TokenType.TFALS)
     );
+
     // the big singles
     private static final Map<String, TokenType> ONE_CHAR_OPS = Map.ofEntries(
-        Map.entry(",", TokenType.TCOMA),
-        Map.entry("[", TokenType.TLBRK),
-        Map.entry("]", TokenType.TRBRK),
-        Map.entry("(", TokenType.TLPAR),
-        Map.entry(")", TokenType.TRPAR),
         Map.entry("=", TokenType.TEQUL),
         Map.entry("+", TokenType.TPLUS),
         Map.entry("-", TokenType.TMINS),
         Map.entry("*", TokenType.TSTAR),
         Map.entry("/", TokenType.TDIVD),
+        Map.entry("<", TokenType.TLESS),
+        Map.entry(">", TokenType.TGRTR)
+    );
+
+    // always single ops
+    private static final Map<String, TokenType> SINGLE_OPS = Map.ofEntries(
+        Map.entry(",", TokenType.TCOMA),
+        Map.entry("[", TokenType.TLBRK),
+        Map.entry("]", TokenType.TRBRK),
+        Map.entry("(", TokenType.TLPAR),
+        Map.entry(")", TokenType.TRPAR),
         Map.entry("%", TokenType.TPERC),
         Map.entry("^", TokenType.TCART),
-        Map.entry("<", TokenType.TLESS),
-        Map.entry(">", TokenType.TGRTR),
         Map.entry(":", TokenType.TCOLN),
         Map.entry(";", TokenType.TSEMI),
         Map.entry(".", TokenType.TDOTT)
     );
+
     // the big doubles
     private static final Map<String, TokenType> TWO_CHAR_OPS = Map.ofEntries(
         Map.entry(">>", TokenType.TGRGR),

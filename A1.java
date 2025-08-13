@@ -21,6 +21,12 @@ public class A1 {
                 token = scanner.nextToken();
                 tokens.add(token);
             } while (token.tokenType != TokenType.T_EOF);
+
+            // used for testing
+            for (Token t : tokens) {
+                System.out.println(t);
+            }
+
         } catch(IOException e) {
             System.err.println("Error reading file: " + filename);
         }

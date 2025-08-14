@@ -7,6 +7,7 @@ public final class Lexer {
     private int line = 1; // starting on line 1
     private int col = 0; // starting at column 0
     private int state;
+    private List<String> buff;
 
     // state constants for the state machine
     private final int READY = 0;
@@ -120,52 +121,25 @@ public final class Lexer {
     }
 
     public Token nextToken() throws IOException {    
-        this.state = READY;
-        List<String> buff = new ArrayList<>();     // can use this to build the token (Eg: reading CD25. buff = ["C", "D", "2", "5"])
-        // loop until token is found, error or EOF (read returns -1)
+        state = READY;
+        buff = new ArrayList<>();     // buffer to build the lexeme (Eg: reading CD25. buff = ["C", "D", "2", "5"])
         Token token = null;
-
-        // TODO: I realised I havent accounted for the line or col number tracking so that will happen at some point lol
         
+        // loop until token is found, error or EOF (read returns -1)
         while (token == null)  {
             int c = in.read();
             switch (state) {
                 case READY:
                     if (isDigit(c)) {
-                        this.state = DIGIT;
+                        state = DIGIT;
                         buff.add(Character.toString(c));
                     }
                     break;
                 case DIGIT:
-                    if (isDigit(c)) {
-                        buff.add(Character.toString(c));
-                    }
-                    else if (c == 46) {     // check if c is a period
-                        int nc = in.read();
-                        if (isDigit(nc)) {  
-                            this.state = REAL;
-                            buff.add(Character.toString(c));
-                            buff.add(Character.toString(nc));
-                        }
-                        else {              // next char is not of real format, we found the end of the int token
-                            in.unread(nc);
-                            in.unread(c);
-                            token = new Token(TokenType.TINTG, String.join("", buff), line, col);
-                        }
-                    }
-                    else {                  // delimiter found, unread and return integer token
-                        in.unread(c);
-                        token = new Token(TokenType.TINTG, String.join("", buff), line, col);
-                    }
+                    token = runDigitState(c);
                     break;
                 case REAL:
-                    if (isDigit(c)) {
-                        buff.add(Character.toString(c));
-                    }
-                    else {
-                        in.unread(c);
-                        token = new Token(TokenType.TREAL, String.join("", buff), line, col);
-                    }
+                    token = runRealState(c);
                     break;
                 
                 // can add more cases for the other states
@@ -175,6 +149,48 @@ public final class Lexer {
         }    
         return token != null ? token : new Token(TokenType.T_EOF, "", line, col);
     }
+
+    /* Runs the logic for the DIGIT state. */
+    private Token runDigitState(int c) throws IOException {
+        Token token = null;
+
+        if (isDigit(c)) {
+            buff.add(Character.toString(c));
+        }
+        else if (c == 46) {     // check if c is a period
+            int nc = read();
+            if (isDigit(nc)) {  
+                state = REAL;
+                buff.add(Character.toString(c));
+                buff.add(Character.toString(nc));
+            }
+            else {              // next char is not of real format, we found the end of the int token
+                unread(nc);
+                unread(c);
+                token = new Token(TokenType.TINTG, String.join("", buff), line, col);
+            }
+        }
+        else {                  // delimiter found, unread and return integer token
+            unread(c);
+            token = new Token(TokenType.TINTG, String.join("", buff), line, col);
+        }
+        return token;
+    }
+
+    /* Runs the logic for the REAL state */
+    private Token runRealState(int c) throws IOException {
+        Token token = null;
+        if (isDigit(c)) {
+            buff.add(Character.toString(c));
+        }
+        else {
+            unread(c);
+            token = new Token(TokenType.TREAL, String.join("", buff), line, col);
+        }
+        return token;
+    }
+
+
     /**
      * Gets the next character from the pushback reader,
      * Tracks the line and column count

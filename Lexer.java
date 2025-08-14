@@ -175,12 +175,106 @@ public final class Lexer {
         }    
         return token != null ? token : new Token(TokenType.T_EOF, "", line, col);
     }
-
+    /**
+     * Gets the next character from the pushback reader,
+     * Tracks the line and column count
+     * @return the char c
+     * @throws IOException
+     */
     private int read() throws IOException {
-        return 1;
+        int c = in.read();
+        if (c == '\n') {
+            line++;
+            col = 0;
+        } else if (c != -1) {
+            col++;
+        }
+        return c;
     }
 
-    private void unread() throws IOException {
+    /**
+     * Puts the c char back into the stream so that the next call of read will read the same char again
+     * Steps everything back one
+     * @param c
+     * @throws IOException
+     */
+    private void unread(int c) throws IOException {
+        if (c == -1) {
+            return;
+        }
+        in.unread(c); 
 
+        if(c == '\n') {
+            line--;
+        } else {
+            col--;
+        }
+    }
+
+    /**
+     * Handles the white space/comments before tokenizing, cleans it up
+     * @return
+     * @throws IOException
+     */
+    private int handleWhitespaceAndComments() throws IOException {
+        while(true) {
+            int c = read();
+            if(c == -1) return -1; // EOF
+            if(isSpace(c)) continue; // skip whitespace 
+            
+            // reminder that comments in CD25 are /--
+            if(c == '/') { // if we hit a '/', it could be a comment
+                int n1 = read(); // read the next char after /, so we can begin checking
+                if(n1 == '-') { // if it is a -, we read the next char
+                    int n2 = read();
+                    if(n2 == '-') { // if we got another -, then we have our guy, sick em fellas
+                        while(true) { // consume it all, until a newline or EOF
+                            int x = read();
+                            if (x == -1 || x == '\n' || x == '\r') {
+                                break;
+                            }
+                        }
+                        continue; 
+                    } else { // if the next char aint -, then just unread the two chars 
+                        unread(n2); 
+                        unread(n1);
+                        return c;
+                    }
+                // reminder that multi line strings start with /** and end with **/
+                } else if (n1 == '*') { // handling multi line strings
+                    int n2 = read();
+                    if (n2 == '*') {
+                        int stars = 2; // we have just read 2 *'s 
+                        while(true) {
+                            int x = read(); // read the next char
+                            if (x == -1) return -1; // reached EOF, comment was never closed
+
+                            if(x == '*') { // if we encounter another star in the comment, increment the count
+                                stars++; 
+                                continue; 
+                            }
+                            if(x == '/') { // if we read a /
+                                if(stars >= 2) { // we check if we have read >= 2 stars previously (>= and not == since technically ****/ is completely legal, so as long as its more than 2 followed by a / its fine)
+                                    break; // found the closing comment
+                                } else { // otherwise this is just a random / in the comment, reset stars back to 0
+                                    stars = 0;
+                                    continue;
+                                }
+                            } 
+                            stars = 0; // any other char breaks star count
+                        }
+                        continue;
+                    } else {
+                        unread(n2);
+                        unread(n1);
+                        return c;
+                    }
+                } else { // if the next char isn't - or *, then just unread the char we just read
+                    unread(n1);
+                    return c;
+                }
+            }
+            return c;
+        }
     }
 } 

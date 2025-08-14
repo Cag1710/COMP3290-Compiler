@@ -130,16 +130,16 @@ public final class Lexer {
             int c = in.read();
             switch (state) {
                 case READY:
-                    if (isDigit(c)) {
-                        state = DIGIT;
-                        buff.add(Character.toString(c));
-                    }
+                    runReadyState(c);
                     break;
                 case DIGIT:
                     token = runDigitState(c);
                     break;
                 case REAL:
                     token = runRealState(c);
+                    break;
+                case WORD:
+                    token = runWordState(c);
                     break;
                 
                 // can add more cases for the other states
@@ -148,6 +148,18 @@ public final class Lexer {
             if (c == -1) { break; }     // break loop if EOF reached
         }    
         return token != null ? token : new Token(TokenType.T_EOF, "", line, col);
+    }
+
+    /* Runs the logic for the READY state */
+    private void runReadyState(int c) {
+        if (isDigit(c)) {
+            state = DIGIT;
+            buff.add(Character.toString(c));
+        }
+        if (isLetter(c)) {
+            state = WORD;
+            buff.add(Character.toString(c));
+        }
     }
 
     /* Runs the logic for the DIGIT state. */
@@ -187,9 +199,28 @@ public final class Lexer {
             unread(c);
             token = new Token(TokenType.TREAL, String.join("", buff), line, col);
         }
-        return token;
+        return token;  
     }
 
+    /* Runs the logic for the WORD state */
+    private Token runWordState(int c) throws IOException {
+        Token token = null;
+        if (isLetterOrDigit(c)) {
+            buff.add(Character.toString(c));
+        }
+        // read char is classed as a delimiter therefore check keywords for lexeme
+        else if (KEYWORDS.containsKey(String.join("", buff).toLowerCase())) {
+            unread(c);
+            TokenType tt = KEYWORDS.get(String.join("", buff).toLowerCase());
+            token = new Token(tt, String.join("", buff), line, col);
+        }
+        // lexeme not found in keyword map therefore token must be an identifier
+        else {
+            unread(c);
+            token = new Token(TokenType.TIDEN, String.join("", buff), line, col);
+        }
+        return token;
+    }
 
     /**
      * Gets the next character from the pushback reader,

@@ -5,5 +5,5 @@ begin
 	/** multi
 	lines **/
 	#
-	i < 10.0; /-- got another one here
+	i <= 10.0; /-- got another one here
 end CD25 Exa

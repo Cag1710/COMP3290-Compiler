@@ -127,7 +127,7 @@ public final class Lexer {
             if (state == READY) {
                 c = runCommentState();         // skips WS/comments and returns first real char
                 if (c == -1) break;            // EOF
-                token = runReadyState(c);
+                token = runReadyState(c);      // then run the ready state
             } else {
                 c = read();
                 switch (state) {
@@ -170,8 +170,8 @@ public final class Lexer {
         }
 
         Token token = null;
-        buff.add(Character.toString(c));
-        token = new Token(TokenType.TUNDF, String.join("", buff), line, col);
+        buff.add(Character.toString(c)); // add the char to the buffer
+        token = new Token(TokenType.TUNDF, String.join("", buff), line, col); // return the token as an undefined token
         return token;
     }
 
@@ -235,22 +235,21 @@ public final class Lexer {
         return token;
     }
 
+    /* Runs the logic for the OP state */
     private Token runOpState(int c) throws IOException {
         Token token = null;
         
-        char oc = buff.get(0).charAt(0);
-        String two = "" + oc + (char)c;
-        TokenType tt2 = TWO_CHAR_OPS.get(two);
-        if(tt2 != null) {
-            state = READY;
-            return token = new Token(tt2, two, line, col);
+        char oc = buff.get(0).charAt(0); // get the char in the buffer
+        String two = "" + oc + (char)c; // add the new char and the old char together e.g. buff : <, c : =, together <=
+        TokenType tt2 = TWO_CHAR_OPS.get(two); // try to get it in the map
+        if(tt2 != null) { // if it is in the map
+            return token = new Token(tt2, two, line, col); // add the token
         }
-        unread(c);
+        unread(c); // if it aint in the map then unread c to read again afterwards
 
-        String one = String.valueOf(oc);
-        TokenType tt1 = ONE_CHAR_OPS.get(one); 
-        token = new Token(tt1, one, line, col);
-        return token;
+        String one = String.valueOf(oc); // turn oc back into a string so < 
+        TokenType tt1 = ONE_CHAR_OPS.get(one); // get the lexeme
+        return token = new Token(tt1, one, line, col); // return the token
     }
 
     /**

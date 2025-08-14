@@ -16,7 +16,7 @@ public final class Lexer {
     private final int REAL = 3;
     private final int OP = 4;
     private final int STRING = 5;
-    private final int COMMENT = 6;
+    // removed comment state as its something that
 
     // the big 3 of the compiler world
     // the big keywords
@@ -62,11 +62,7 @@ public final class Lexer {
         Map.entry("*", TokenType.TSTAR),
         Map.entry("/", TokenType.TDIVD),
         Map.entry("<", TokenType.TLESS),
-        Map.entry(">", TokenType.TGRTR)
-    );
-
-    // always single ops
-    private static final Map<String, TokenType> SINGLE_OPS = Map.ofEntries(
+        Map.entry(">", TokenType.TGRTR),
         Map.entry(",", TokenType.TCOMA),
         Map.entry("[", TokenType.TLBRK),
         Map.entry("]", TokenType.TRBRK),
@@ -124,26 +120,31 @@ public final class Lexer {
         state = READY;
         buff = new ArrayList<>();     // buffer to build the lexeme (Eg: reading CD25. buff = ["C", "D", "2", "5"])
         Token token = null;
+        int c = 0;
         
         // loop until token is found, error or EOF (read returns -1)
         while (token == null)  {
-            int c = in.read();
-            switch (state) {
-                case READY:
-                    runReadyState(c);
-                    break;
-                case DIGIT:
-                    token = runDigitState(c);
-                    break;
-                case REAL:
-                    token = runRealState(c);
-                    break;
-                case WORD:
-                    token = runWordState(c);
-                    break;
-                
-                // can add more cases for the other states
-                
+            if (state == READY) {
+                c = runCommentState();         // skips WS/comments and returns first real char
+                if (c == -1) break;            // EOF
+                token = runReadyState(c);
+            } else {
+                c = read();
+                switch (state) {
+                    case DIGIT:
+                        token = runDigitState(c);
+                        break;
+                    case REAL:
+                        token = runRealState(c);
+                        break;
+                    case WORD:
+                        token = runWordState(c);
+                        break;
+                    case OP:
+                        token = runOpState(c);
+                        break;
+                    // can add more cases for the other states 
+                }
             }
             if (c == -1) { break; }     // break loop if EOF reached
         }    
@@ -151,15 +152,27 @@ public final class Lexer {
     }
 
     /* Runs the logic for the READY state */
-    private void runReadyState(int c) {
+    private Token runReadyState(int c) {
         if (isDigit(c)) {
             state = DIGIT;
             buff.add(Character.toString(c));
+            return null;
         }
         if (isLetter(c)) {
             state = WORD;
             buff.add(Character.toString(c));
+            return null;
         }
+        if(ONE_CHAR_OPS.containsKey(Character.toString(c))) {
+            state = OP;
+            buff.add(Character.toString(c));
+            return null;
+        }
+
+        Token token = null;
+        buff.add(Character.toString(c));
+        token = new Token(TokenType.TUNDF, String.join("", buff), line, col);
+        return token;
     }
 
     /* Runs the logic for the DIGIT state. */
@@ -222,6 +235,24 @@ public final class Lexer {
         return token;
     }
 
+    private Token runOpState(int c) throws IOException {
+        Token token = null;
+        
+        char oc = buff.get(0).charAt(0);
+        String two = "" + oc + (char)c;
+        TokenType tt2 = TWO_CHAR_OPS.get(two);
+        if(tt2 != null) {
+            state = READY;
+            return token = new Token(tt2, two, line, col);
+        }
+        unread(c);
+
+        String one = String.valueOf(oc);
+        TokenType tt1 = ONE_CHAR_OPS.get(one); 
+        token = new Token(tt1, one, line, col);
+        return token;
+    }
+
     /**
      * Gets the next character from the pushback reader,
      * Tracks the line and column count
@@ -263,7 +294,7 @@ public final class Lexer {
      * @return
      * @throws IOException
      */
-    private int handleWhitespaceAndComments() throws IOException {
+    private int runCommentState() throws IOException {
         while(true) {
             int c = read();
             if(c == -1) return -1; // EOF

@@ -12,9 +12,10 @@ public final class Lexer {
     private final int READY = 0;
     private final int WORD = 1;
     private final int DIGIT = 2;
-    private final int OP = 3;
-    private final int STRING = 4;
-    private final int COMMENT = 5;
+    private final int REAL = 3;
+    private final int OP = 4;
+    private final int STRING = 5;
+    private final int COMMENT = 6;
 
     // the big 3 of the compiler world
     // the big keywords
@@ -115,33 +116,60 @@ public final class Lexer {
     }
 
     public Token nextToken() throws IOException {    
+        this.state = READY;
         List<String> buff = new ArrayList<>();     // can use this to build the token (Eg: reading CD25. buff = ["C", "D", "2", "5"])
-        // loop until token is found or error
+        // loop until token is found, error or EOF (read returns -1)
+        Token token = null;
 
-        /*
-        * IF space
-        *      skip / delimit
-        * IF single token
-        *      return token
-        * IF character [a-z]
-        *      set state = WORD
-        *      ... determine keyword, iden etc.
-        * IF digit [0-9]
-        *      set state = DIGIT
-        *      ... determine integer, real
-        * IF operator
-        *      set state = OP
-        *      ... determine operator
-        * IF quote (")
-        *      set state = STRING
-        *      ... determine content
-        */
-
-        // just an example read and store in buff
-        int c = read();
-        buff.add(Character.toString(c));
-
-        return null;
+        // TODO: I realised I havent accounted for the line or col number tracking so that will happen at some point lol
+        
+        while (token == null)  {
+            int c = in.read();
+            switch (state) {
+                case READY:
+                    if (isDigit(c)) {
+                        this.state = DIGIT;
+                        buff.add(Character.toString(c));
+                    }
+                    break;
+                case DIGIT:
+                    if (isDigit(c)) {
+                        buff.add(Character.toString(c));
+                    }
+                    else if (c == 46) {     // check if c is a period
+                        int nc = in.read();
+                        if (isDigit(nc)) {  
+                            this.state = REAL;
+                            buff.add(Character.toString(c));
+                            buff.add(Character.toString(nc));
+                        }
+                        else {              // next char is not of real format, we found the end of the int token
+                            in.unread(nc);
+                            in.unread(c);
+                            token = new Token(TokenType.TINTG, String.join("", buff), line, col);
+                        }
+                    }
+                    else {                  // delimiter found, unread and return integer token
+                        in.unread(c);
+                        token = new Token(TokenType.TINTG, String.join("", buff), line, col);
+                    }
+                    break;
+                case REAL:
+                    if (isDigit(c)) {
+                        buff.add(Character.toString(c));
+                    }
+                    else {
+                        in.unread(c);
+                        token = new Token(TokenType.TREAL, String.join("", buff), line, col);
+                    }
+                    break;
+                
+                // can add more cases for the other states
+                
+            }
+            if (c == -1) { break; }     // break loop if EOF reached
+        }    
+        return token != null ? token : new Token(TokenType.T_EOF, "", line, col);
     }
     /**
      * Gets the next character from the pushback reader,

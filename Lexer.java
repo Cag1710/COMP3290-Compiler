@@ -61,7 +61,11 @@ public final class Lexer {
         Map.entry("*", TokenType.TSTAR),
         Map.entry("/", TokenType.TDIVD),
         Map.entry("<", TokenType.TLESS),
-        Map.entry(">", TokenType.TGRTR),
+        Map.entry(">", TokenType.TGRTR)
+    );
+
+    // always single ops
+    private static final Map<String, TokenType> SINGLE_OPS = Map.ofEntries(
         Map.entry(",", TokenType.TCOMA),
         Map.entry("[", TokenType.TLBRK),
         Map.entry("]", TokenType.TRBRK),

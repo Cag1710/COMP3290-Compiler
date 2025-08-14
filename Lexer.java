@@ -249,7 +249,8 @@ public final class Lexer {
 
         String one = String.valueOf(oc); // turn oc back into a string so < 
         TokenType tt1 = ONE_CHAR_OPS.get(one); // get the lexeme
-        return token = new Token(tt1, one, line, col); // return the token
+        token = new Token(tt1, one, line, col); // return the token
+        return token;
     }
 
     /**

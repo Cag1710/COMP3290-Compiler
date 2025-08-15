@@ -143,7 +143,9 @@ public final class Lexer {
                     case OP:
                         token = runOpState(c);
                         break;
-                    // can add more cases for the other states 
+                    case STRING:
+                        token = runStringState(c);
+                        break;
                 }
             }
             if (c == -1) { break; }     // break loop if EOF reached
@@ -163,9 +165,13 @@ public final class Lexer {
             buff.add(Character.toString(c));
             return null;
         }
-        if(ONE_CHAR_OPS.containsKey(Character.toString(c))) {
+        if (ONE_CHAR_OPS.containsKey(Character.toString(c))) {
             state = OP;
             buff.add(Character.toString(c));
+            return null;
+        }
+        if (c == '\"') {
+            state = STRING;     // we do not include the "" in the string itself
             return null;
         }
 
@@ -250,6 +256,23 @@ public final class Lexer {
         String one = String.valueOf(oc); // turn oc back into a string so < 
         TokenType tt1 = ONE_CHAR_OPS.get(one); // get the lexeme
         token = new Token(tt1, one, line, col); // return the token
+        return token;
+    }
+
+    /* Runs the logic for the STRING state */
+    private Token runStringState(int c) throws IOException {
+        Token token = null;
+        
+        if (c == '\n') {                        // string cannot terminate with a newline, error
+            buff.add(Character.toString(c));
+            token = new Token(TokenType.TUNDF, String.join("", buff), line, col);
+        }
+        else if (c == '\"') {
+            token = new Token(TokenType.TSTRG, String.join("", buff), line, col);
+        }
+        else {
+            buff.add(Character.toString(c));    // add any character to the string
+        }
         return token;
     }
 

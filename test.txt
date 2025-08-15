@@ -6,4 +6,7 @@ begin
 	lines **/
 	#
 	i <= 10.0; /-- got another one here
+	Out << "This is a string here" << Line
+	"Here is another string with random chars: *98372674&&*@><,"
+	"Here is one that terminates with a new line
 end CD25 Exa

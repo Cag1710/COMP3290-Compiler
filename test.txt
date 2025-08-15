@@ -1,6 +1,9 @@
-CD25 Exa
+CD25 Exa /-- this is a comment
 main
 	i : integer
 begin
-	i = 10;
+	/** multi
+	lines **/
+	#
+	i <= 10.0; /-- got another one here
 end CD25 Exa

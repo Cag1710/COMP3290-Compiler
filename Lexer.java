@@ -12,6 +12,7 @@ public final class Lexer {
     private int tokCol = 0; // keeps track of a specific tokens col number
     private int state; // the state we are in
     private List<String> buff; 
+    private OutputController oc;
 
     // state constants for the state machine
     private final int READY = 0;
@@ -92,10 +93,10 @@ public final class Lexer {
         Map.entry("/=", TokenType.TDVEQ)
     );
 
-    public Lexer(Reader r) {
+    public Lexer(Reader r, OutputController oc) {
         this.in = new PushbackReader(new BufferedReader(r), 2); // wraps the incoming reader in a bufferedreader for efficient reading, then wraps that in a pushbackreader with a buffer size of 2
-                                                                     // allows us to push back tokens onto the buffer to be read next 
-                                                                     // e.g. /==, read /, read =, read =. but /== isnt a token, push that last token onto the buffer as it probably starts the next token and process just /=
+        this.oc = oc;                          // allows us to push back tokens onto the buffer to be read next 
+                                                                // e.g. /==, read /, read =, read =. but /== isnt a token, push that last token onto the buffer as it probably starts the next token and process just /=
         this.state = READY; // begin in the ready state                                          
     }
 

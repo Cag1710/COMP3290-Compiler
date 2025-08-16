@@ -3,9 +3,13 @@ import java.util.*;
 
 public final class Lexer {
 
+    private static final class Pos { final int line, col; Pos(int l, int c){ this.line=l; this.col=c; } } // to keep a more accurate position of token lines and cols
+    private final Deque<Pos> posStack = new ArrayDeque<>(8); // used to pop the token on the stack so we can go back even if we cross new lines
     private final PushbackReader in; // java class that reads characters one at a time from another reader
     private int line = 1; // starting on line 1
     private int col = 0; // starting at column 0
+    private int tokLine = 1;
+    private int tokCol = 0;
     private int state;
     private List<String> buff;
 
@@ -96,6 +100,11 @@ public final class Lexer {
                                                                      // e.g. /==, read /, read =, read =. but /== isnt a token, push that last token onto the buffer as it probably starts the next token and process just /=
     }
 
+    private void markTokenStart() {
+        tokLine = line;
+        tokCol = col;
+    }
+
     // for skipping whitespace as defined by the assignment spec
     private static boolean isSpace(int c) {
         return c == ' ' || c == '\t' || c == '\n' || c == '\r';
@@ -116,6 +125,14 @@ public final class Lexer {
         return isLetter(c) || isDigit(c);
     }
 
+    private static boolean isOperatorChar(int c) {
+        return "=+-*/<>[],()%^:;.!".indexOf(c) >= 0;
+    }
+
+    private static boolean isStopForUndef(int c) {
+        return c == -1 || isSpace(c) || isLetterOrDigit(c) || isOperatorChar(c) || c == '"';
+    }
+
     public Token nextToken() throws IOException {    
         state = READY;
         buff = new ArrayList<>();     // buffer to build the lexeme (Eg: reading CD25. buff = ["C", "D", "2", "5"])
@@ -127,6 +144,7 @@ public final class Lexer {
             if (state == READY) {
                 c = runCommentState();         // skips WS/comments and returns first real char
                 if (c == -1) break;            // EOF
+                markTokenStart();
                 token = runReadyState(c);      // then run the ready state
             } else {
                 c = read();
@@ -150,11 +168,11 @@ public final class Lexer {
             }
             if (c == -1) { break; }     // break loop if EOF reached
         }    
-        return token != null ? token : new Token(TokenType.T_EOF, "", line, col);
+        return token != null ? token : new Token(TokenType.T_EOF, "", tokLine, tokCol);
     }
 
     /* Runs the logic for the READY state */
-    private Token runReadyState(int c) {
+    private Token runReadyState(int c) throws IOException {
         if (isDigit(c)) {
             state = DIGIT;
             buff.add(Character.toString(c));
@@ -165,7 +183,7 @@ public final class Lexer {
             buff.add(Character.toString(c));
             return null;
         }
-        if (ONE_CHAR_OPS.containsKey(Character.toString(c))) {
+        if (ONE_CHAR_OPS.containsKey(Character.toString(c)) || c == '!') {
             state = OP;
             buff.add(Character.toString(c));
             return null;
@@ -175,10 +193,16 @@ public final class Lexer {
             return null;
         }
 
-        Token token = null;
-        buff.add(Character.toString(c)); // add the char to the buffer
-        token = new Token(TokenType.TUNDF, String.join("", buff), line, col); // return the token as an undefined token
-        return token;
+        buff.add(Character.toString(c));
+        while (true) {
+            int x = read();                 // may be -1 at EOF
+            if (isStopForUndef(x)) {
+                unread(x);                  // safe even for -1 (your unread guards it)
+                break;
+            }
+            buff.add(Character.toString(x));
+        }
+        return new Token(TokenType.TUNDF, String.join("", buff), tokLine, tokCol);
     }
 
     /* Runs the logic for the DIGIT state. */
@@ -198,12 +222,12 @@ public final class Lexer {
             else {              // next char is not of real format, we found the end of the int token
                 unread(nc);
                 unread(c);
-                token = new Token(TokenType.TINTG, String.join("", buff), line, col);
+                token = new Token(TokenType.TILIT, String.join("", buff), tokLine, tokCol);
             }
         }
         else {                  // delimiter found, unread and return integer token
             unread(c);
-            token = new Token(TokenType.TINTG, String.join("", buff), line, col);
+            token = new Token(TokenType.TILIT, String.join("", buff), tokLine, tokCol);
         }
         return token;
     }
@@ -216,7 +240,7 @@ public final class Lexer {
         }
         else {
             unread(c);
-            token = new Token(TokenType.TREAL, String.join("", buff), line, col);
+            token = new Token(TokenType.TFLIT, String.join("", buff), tokLine, tokCol);
         }
         return token;  
     }
@@ -231,12 +255,12 @@ public final class Lexer {
         else if (KEYWORDS.containsKey(String.join("", buff).toLowerCase())) {
             unread(c);
             TokenType tt = KEYWORDS.get(String.join("", buff).toLowerCase());
-            token = new Token(tt, String.join("", buff), line, col);
+            token = new Token(tt, String.join("", buff), tokLine, tokCol);
         }
         // lexeme not found in keyword map therefore token must be an identifier
         else {
             unread(c);
-            token = new Token(TokenType.TIDEN, String.join("", buff), line, col);
+            token = new Token(TokenType.TIDEN, String.join("", buff), tokLine, tokCol);
         }
         return token;
     }
@@ -244,18 +268,27 @@ public final class Lexer {
     /* Runs the logic for the OP state */
     private Token runOpState(int c) throws IOException {
         Token token = null;
-        
         char oc = buff.get(0).charAt(0); // get the char in the buffer
+        
+        if (oc == '!') { // ! by itself is undefined but != is defined
+            if (c == '=') { // we check if it has a = that follows it
+                return new Token(TokenType.TNEQL, "!=" , tokLine, tokCol); // if it does then its just TNEQL
+            } else {
+                unread(c);
+                return new Token(TokenType.TUNDF, "!" , tokLine, tokCol); // but if it doesnt its undefined
+            }
+        }
+        
         String two = "" + oc + (char)c; // add the new char and the old char together e.g. buff : <, c : =, together <=
         TokenType tt2 = TWO_CHAR_OPS.get(two); // try to get it in the map
         if(tt2 != null) { // if it is in the map
-            return token = new Token(tt2, two, line, col); // add the token
+            return token = new Token(tt2, two, tokLine, tokCol); // add the token
         }
         unread(c); // if it aint in the map then unread c to read again afterwards
 
         String one = String.valueOf(oc); // turn oc back into a string so < 
         TokenType tt1 = ONE_CHAR_OPS.get(one); // get the lexeme
-        token = new Token(tt1, one, line, col); // return the token
+        token = new Token(tt1, one, tokLine, tokCol); // return the token
         return token;
     }
 
@@ -263,12 +296,14 @@ public final class Lexer {
     private Token runStringState(int c) throws IOException {
         Token token = null;
         
-        if (c == '\n') {                        // string cannot terminate with a newline, error
-            buff.add(Character.toString(c));
-            token = new Token(TokenType.TUNDF, String.join("", buff), line, col);
+        if (c == -1) {
+            token = new Token(TokenType.TUNDF, String.join("", buff), tokLine, tokCol);
+        }
+        else if (c == '\n') {                        // string cannot terminate with a newline, error
+            token = new Token(TokenType.TUNDF, String.join("", buff), tokLine, tokCol);
         }
         else if (c == '\"') {
-            token = new Token(TokenType.TSTRG, String.join("", buff), line, col);
+            token = new Token(TokenType.TSTRG, String.join("", buff), tokLine, tokCol);
         }
         else {
             buff.add(Character.toString(c));    // add any character to the string
@@ -284,6 +319,10 @@ public final class Lexer {
      */
     private int read() throws IOException {
         int c = in.read();
+
+        posStack.push(new Pos(line, col)); // when we read, we push the last position on to the stack 
+                                           // so if we need to backtrack across lines its actually accurate
+
         if (c == '\n') {
             line++;
             col = 0;
@@ -305,10 +344,10 @@ public final class Lexer {
         }
         in.unread(c); 
 
-        if(c == '\n') {
-            line--;
-        } else {
-            col--;
+        if (!posStack.isEmpty()) { // as long as the stack aint empty
+            Pos p = posStack.pop(); // we pop
+            this.line = p.line; // and return the line and col numbers to the last position
+            this.col  = p.col;
         }
     }
 

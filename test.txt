@@ -1,12 +1,16 @@
 CD25 Exa /-- this is a comment
 main
-	i : integer
+	i : real
+	j : integer
 begin
 	/** multi
 	lines **/
-	#
+	#@@@ @#
+	!
+	j != 10;
 	i <= 10.0; /-- got another one here
 	Out << "This is a string here" << Line
 	"Here is another string with random chars: *98372674&&*@><,"
 	"Here is one that terminates with a new line
+	i = 10;
 end CD25 Exa

@@ -13,4 +13,5 @@ begin
 	"Here is another string with random chars: *98372674&&*@><,"
 	"Here is one that terminates with a new line
 	i = 10;
+	dasdasdds = 15;
 end CD25 Exa

@@ -284,7 +284,7 @@ public final class Lexer {
         
         String two = "" + oc + (char)c; // add the new char and the old char together e.g. buff : <, c : =, together <=
         TokenType tt2 = TWO_CHAR_OPS.get(two); // try to get it in the map
-        if(tt2 != null) { // if it is in the map
+        if (tt2 != null) { // if it is in the map
             return token = new Token(tt2, two, tokLine, tokCol); // add the token
         }
         unread(c); // if it aint in the map then unread c to read again afterwards
@@ -365,11 +365,11 @@ public final class Lexer {
             if(isSpace(c)) continue; // skip whitespace 
             
             // reminder that comments in CD25 are /--
-            if(c == '/') { // if we hit a '/', it could be a comment
+            if (c == '/') { // if we hit a '/', it could be a comment
                 int n1 = read(); // read the next char after /, so we can begin checking
-                if(n1 == '-') { // if it is a -, we read the next char
+                if (n1 == '-') { // if it is a -, we read the next char
                     int n2 = read();
-                    if(n2 == '-') { // if we got another -, then we have our guy, sick em fellas
+                    if (n2 == '-') { // if we got another -, then we have our guy, sick em fellas
                         while(true) { // consume it all, until a newline or EOF
                             int x = read();
                             if (x == -1 || x == '\n' || x == '\r') {
@@ -391,11 +391,11 @@ public final class Lexer {
                             int x = read(); // read the next char
                             if (x == -1) return -1; // reached EOF, comment was never closed
 
-                            if(x == '*') { // if we encounter another star in the comment, increment the count
+                            if (x == '*') { // if we encounter another star in the comment, increment the count
                                 stars++; 
                                 continue; 
                             }
-                            if(x == '/') { // if we read a /
+                            if (x == '/') { // if we read a /
                                 if(stars >= 2) { // we check if we have read >= 2 stars previously (>= and not == since technically ****/ is completely legal, so as long as its more than 2 followed by a / its fine)
                                     break; // found the closing comment
                                 } else { // otherwise this is just a random / in the comment, reset stars back to 0

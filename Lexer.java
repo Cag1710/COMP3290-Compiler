@@ -93,11 +93,11 @@ public final class Lexer {
         Map.entry("/=", TokenType.TDVEQ)
     );
 
-    public Lexer(Reader r, OutputController oc) {
+    public Lexer(Reader r, OutputController oc) throws IOException {
         this.in = new PushbackReader(new BufferedReader(r), 2); // wraps the incoming reader in a bufferedreader for efficient reading, then wraps that in a pushbackreader with a buffer size of 2
         this.oc = oc;                          // allows us to push back tokens onto the buffer to be read next 
                                                                 // e.g. /==, read /, read =, read =. but /== isnt a token, push that last token onto the buffer as it probably starts the next token and process just /=
-        this.state = READY; // begin in the ready state                                          
+        this.state = READY; // begin in the ready state                                 
     }
 
     // for marking a tokens start line and col number
@@ -170,8 +170,9 @@ public final class Lexer {
                         break;
                 }
             }
-            if (c == -1) { break; }     // break loop if EOF reached
-        }    
+            if (c == -1) { break; }     // EOF reached
+        }
+        if (c == -1) { oc.commitBuffer(); } // need this check here again after the loop it was buggin when I had it above
         return token != null ? token : new Token(TokenType.T_EOF, "", tokLine, tokCol);
     }
 
@@ -206,6 +207,7 @@ public final class Lexer {
             }
             buff.add(Character.toString(x)); // otherwise continue adding undefined chars
         }
+        oc.addError(new CompilerError("Lexical", "Unknown character, lexeme undefined.", tokLine, tokCol));
         return new Token(TokenType.TUNDF, String.join("", buff), tokLine, tokCol);
     }
 
@@ -279,6 +281,7 @@ public final class Lexer {
                 return new Token(TokenType.TNEQL, "!=" , tokLine, tokCol); // if it does then its just TNEQL
             } else {
                 unread(c);
+                this.oc.addError(new CompilerError("Lexical", "Unknown character, lexeme undefined.", tokLine, tokCol));
                 return new Token(TokenType.TUNDF, "!" , tokLine, tokCol); // but if it doesnt its undefined
             }
         }
@@ -302,9 +305,11 @@ public final class Lexer {
         
         if (c == -1) { // just in case for some reason an editor doesnt end with a new line, niche but it rounds it out
             token = new Token(TokenType.TUNDF, String.join("", buff), tokLine, tokCol);
+            oc.addError(new CompilerError("Lexical", "Strings cannot terminate with EOF.", tokLine, tokCol));   // adds a lexical error to be reported in the listing file
         }
         else if (c == '\n') {                        // string cannot terminate with a newline, error
             token = new Token(TokenType.TUNDF, String.join("", buff), tokLine, tokCol);
+            oc.addError(new CompilerError("Lexical", "Strings cannot terminate with newline.", tokLine, tokCol));
         }
         else if (c == '\"') {
             token = new Token(TokenType.TSTRG, String.join("", buff), tokLine, tokCol);
@@ -332,6 +337,7 @@ public final class Lexer {
         } else if (c != -1) {
             col++;
         }
+        oc.addToBuffer(c);                  // add char to the listing file buffer
         return c;
     }
 
@@ -352,6 +358,7 @@ public final class Lexer {
             this.line = p.line; // and return the line and col numbers to the last position
             this.col  = p.col;
         }
+        oc.removeLastFromBuffer();  // removes last added element from the listing file buffer
     }
 
     /**

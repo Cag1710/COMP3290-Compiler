@@ -13,7 +13,8 @@ public class A1 {
 
         try {
             String source = Files.readString(Path.of(filename));
-            Lexer scanner = new Lexer(new StringReader(source));
+            OutputController oc = new OutputController(filename);
+            Lexer scanner = new Lexer(new StringReader(source), oc);
             List<Token> tokens = new ArrayList<>();
 
             Token token;

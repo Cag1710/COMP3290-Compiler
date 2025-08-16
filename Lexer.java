@@ -196,14 +196,14 @@ public final class Lexer {
             return null;
         }
 
-        buff.add(Character.toString(c));
+        buff.add(Character.toString(c)); // the beginning undefined char
         while (true) {
-            int x = read();                 
-            if (isStopForUndef(x)) {
+            int x = read();          // we continue to read       
+            if (isStopForUndef(x)) { // until we find a char that is valid
                 unread(x);                  
                 break;
             }
-            buff.add(Character.toString(x));
+            buff.add(Character.toString(x)); // otherwise continue adding undefined chars
         }
         return new Token(TokenType.TUNDF, String.join("", buff), tokLine, tokCol);
     }
@@ -289,7 +289,7 @@ public final class Lexer {
         }
         unread(c); // if it aint in the map then unread c to read again afterwards
 
-        String one = String.valueOf(oc); // turn oc back into a string so < 
+        String one = String.valueOf(oc); // turn oc back into a string 
         TokenType tt1 = ONE_CHAR_OPS.get(one); // get the lexeme
         token = new Token(tt1, one, tokLine, tokCol); // return the token
         return token;
@@ -299,7 +299,7 @@ public final class Lexer {
     private Token runStringState(int c) throws IOException {
         Token token = null;
         
-        if (c == -1) {
+        if (c == -1) { // just in case for some reason an editor doesnt end with a new line, niche but it rounds it out
             token = new Token(TokenType.TUNDF, String.join("", buff), tokLine, tokCol);
         }
         else if (c == '\n') {                        // string cannot terminate with a newline, error
@@ -317,7 +317,7 @@ public final class Lexer {
     /**
      * Gets the next character from the pushback reader,
      * Tracks the line and column count
-     * @return the char c
+     * @return the next char
      * @throws IOException
      */
     private int read() throws IOException {
@@ -336,7 +336,7 @@ public final class Lexer {
 
     /**
      * Puts the c char back into the stream so that the next call of read will read the same char again
-     * Steps everything back one
+     * Steps everything back to the previously documented position
      * @param c
      * @throws IOException
      */
@@ -354,8 +354,8 @@ public final class Lexer {
     }
 
     /**
-     * Handles the white space/comments before tokenizing, cleans it up
-     * @return
+     * Handles the white space/comments between tokens
+     * @return the next valid char
      * @throws IOException
      */
     private int runCommentState() throws IOException {

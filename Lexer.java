@@ -8,10 +8,10 @@ public final class Lexer {
     private final PushbackReader in; // java class that reads characters one at a time from another reader
     private int line = 1; // starting on line 1
     private int col = 0; // starting at column 0
-    private int tokLine = 1;
-    private int tokCol = 0;
-    private int state;
-    private List<String> buff;
+    private int tokLine = 1; // keeps track of a specific tokens line number
+    private int tokCol = 0; // keeps track of a specific tokens col number
+    private int state; // the state we are in
+    private List<String> buff; 
 
     // state constants for the state machine
     private final int READY = 0;
@@ -20,7 +20,6 @@ public final class Lexer {
     private final int REAL = 3;
     private final int OP = 4;
     private final int STRING = 5;
-    // removed comment state as its something that
 
     // the big 3 of the compiler world
     // the big keywords
@@ -94,18 +93,19 @@ public final class Lexer {
     );
 
     public Lexer(Reader r) {
-        this.in = new PushbackReader(new BufferedReader(r), 2); // wrapping wraps in wraps
-        this.state = READY;                                          // specifically, wraps the incoming reader in a bufferedreader for efficient reading, then wraps that in a pushbackreader with a buffer size of 2
+        this.in = new PushbackReader(new BufferedReader(r), 2); // wraps the incoming reader in a bufferedreader for efficient reading, then wraps that in a pushbackreader with a buffer size of 2
                                                                      // allows us to push back tokens onto the buffer to be read next 
                                                                      // e.g. /==, read /, read =, read =. but /== isnt a token, push that last token onto the buffer as it probably starts the next token and process just /=
+        this.state = READY; // begin in the ready state                                          
     }
 
+    // for marking a tokens start line and col number
     private void markTokenStart() {
         tokLine = line;
         tokCol = col;
     }
 
-    // for skipping whitespace as defined by the assignment spec
+    // for skipping whitespace
     private static boolean isSpace(int c) {
         return c == ' ' || c == '\t' || c == '\n' || c == '\r';
     }
@@ -125,14 +125,17 @@ public final class Lexer {
         return isLetter(c) || isDigit(c);
     }
 
+    // to indentify if its an operator char
     private static boolean isOperatorChar(int c) {
         return "=+-*/<>[],()%^:;.!".indexOf(c) >= 0;
     }
 
+    // to figure out when we need to stop reading an undefined char, i.e read until we find a valid char
     private static boolean isStopForUndef(int c) {
         return c == -1 || isSpace(c) || isLetterOrDigit(c) || isOperatorChar(c) || c == '"';
     }
 
+    // to read the next token
     public Token nextToken() throws IOException {    
         state = READY;
         buff = new ArrayList<>();     // buffer to build the lexeme (Eg: reading CD25. buff = ["C", "D", "2", "5"])
@@ -144,7 +147,7 @@ public final class Lexer {
             if (state == READY) {
                 c = runCommentState();         // skips WS/comments and returns first real char
                 if (c == -1) break;            // EOF
-                markTokenStart();
+                markTokenStart();              // mark a tokens start col and line number
                 token = runReadyState(c);      // then run the ready state
             } else {
                 c = read();
@@ -195,9 +198,9 @@ public final class Lexer {
 
         buff.add(Character.toString(c));
         while (true) {
-            int x = read();                 // may be -1 at EOF
+            int x = read();                 
             if (isStopForUndef(x)) {
-                unread(x);                  // safe even for -1 (your unread guards it)
+                unread(x);                  
                 break;
             }
             buff.add(Character.toString(x));
@@ -322,7 +325,6 @@ public final class Lexer {
 
         posStack.push(new Pos(line, col)); // when we read, we push the last position on to the stack 
                                            // so if we need to backtrack across lines its actually accurate
-
         if (c == '\n') {
             line++;
             col = 0;

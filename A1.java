@@ -1,3 +1,5 @@
+/* Main entry point for group 3 A1 Part B */
+
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;

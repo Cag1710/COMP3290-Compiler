@@ -27,6 +27,13 @@ public class A1 {
 
             TokenPrinter.printTokens(tokens, System.out);
 
+            TokenStream ts = new TokenStream(tokens);
+            ErrorReporter er = new ErrorReporter(oc);
+            Parser parser = new Parser(ts, er);
+            StNode root = parser.parseProgram();
+
+            // Assumedly we would probs have something to print here as well, maybe a seperate class called TreePrinter or smthn to print the tree
+
         } catch(IOException e) {
             System.err.println("Error reading file: " + filename);
         }

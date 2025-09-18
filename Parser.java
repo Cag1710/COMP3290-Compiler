@@ -1,9 +1,11 @@
 public class Parser {
     private final TokenStream ts;
     private final ErrorReporter er;
+    private final SymbolTable table;
 
-    public Parser(TokenStream ts, ErrorReporter er) {
+    public Parser(TokenStream ts, SymbolTable table, ErrorReporter er) {
         this.ts = ts;
+        this.table = table;
         this.er = er;
     }
 

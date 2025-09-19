@@ -1,9 +1,18 @@
 import java.time.format.TextStyle;
+import java.util.Set;
 
 public class Parser {
     private final TokenStream ts;
     private final ErrorReporter er;
     private final SymbolTable table;
+
+    private static final Set<TokenType> STAT_FOLLOW = Set.of(
+        TokenType.TSEMI,   // end of a simple statement
+        TokenType.TTEND,   // end of block
+        TokenType.TELSE,   // else
+        TokenType.TUNTL,   // until 
+        TokenType.T_EOF    // safety
+    );
 
     public Parser(TokenStream ts, SymbolTable table, ErrorReporter er) {
         this.ts = ts;
@@ -103,11 +112,77 @@ public class Parser {
     private StNode parseStats() {
         StNode stats = new StNode(StNodeKind.NSTATS, null, ts.peek().line, ts.peek().col);
 
+        while(startsStat(ts.peek().tokenType)) {
+            stats.add(parseStat());
+            if(ts.expect(TokenType.TSEMI) == null) {
+                er.syntax("expected ';' after statement", ts.peek());
+                ts.syncTo(STAT_FOLLOW);
+                ts.match(TokenType.TSEMI);
+            }
+        }
+
         return stats;
     }
 
+    private boolean startsStat(TokenType t) {
+        return t == TokenType.TINPT // In
+        || t == TokenType.TOUTP // Out
+        || t == TokenType.TRETN // Return
+        || t == TokenType.TIDEN; // AsgnStat or CallStat
+    }
+
+    private StNode parseStat() {
+        TokenType t = ts.peek().tokenType;
+        if (t == TokenType.TINPT || t == TokenType.TOUTP) return parseIoStat();
+        if (t == TokenType.TRETN) return parseReturnStat();
+        if (t == TokenType.TIDEN) return parseAsgnOrCall();
+        er.syntax("invalid statement start", ts.peek());
+        return StNode.undefAt(ts.peek());
+    }
+
+    /**
+     * <iostat> ::= In >> <vlist> | Out << <outTail> 
+     * <outTail> ::= Line | <prlist> <lineTail>
+     * <lineTail> ::=  << Line | ε
+     */
     private StNode parseIoStat() {
-        return null;
+        // In >>
+        if(ts.match(TokenType.TINPT)) {
+            if(ts.expect(TokenType.TGRGR) == null) { 
+                er.syntax("expected '>>' after 'In'", ts.peek()); 
+                return StNode.undefAt(ts.peek());
+            }
+            // In >> <vlist>
+            StNode vlist = parseVList();
+            return new StNode(StNodeKind.NINPUT, null, vlist.line, vlist.col).add(vlist);
+        }
+        
+        // Out <<
+        Token outTok = ts.expect(TokenType.TOUTP);
+        if(outTok == null) {
+            er.syntax("expected 'Out'", ts.peek());
+            return StNode.undefAt(ts.peek());
+        }
+        if(ts.expect(TokenType.TLSLS) == null) {
+            er.syntax("expected '<<' after 'Out'", ts.peek());
+            return StNode.undefAt(ts.peek());
+        }
+        if(ts.match(TokenType.TOUTL)) {
+            // Out << Line
+            return new StNode(StNodeKind.NOUTL, null, outTok.line, outTok.col);
+        }
+
+        // Out << <prlist> << Line
+        StNode list = parsePrList();
+        if(ts.match(TokenType.TLSLS)) {
+            if(ts.expect(TokenType.TOUTL) == null) {
+                er.syntax("expected 'Line' after '<<'", ts.peek());
+                return StNode.undefAt(ts.peek());
+            }
+            return new StNode(StNodeKind.NOUTL, null, outTok.line, outTok.col).add(list);
+        }
+        // Out << <prlist>
+        return new StNode(StNodeKind.NOUTP, null, outTok.line, outTok.col).add(list);
     }
 
     private StNode parseAsgnOrCall() {
@@ -146,16 +221,56 @@ public class Parser {
         return null;
     }
 
+    /**
+     * <expr> ::= <term> <expr’> 
+     * <expr’> ::= + <term> <expr’> | - <term> <expr’> | ε
+     */
     private StNode parseExpr() {
-        return null;
+        StNode left = parseTerm();
+        while(true) {
+            if(ts.match(TokenType.TPLUS)) {
+                left = new StNode(StNodeKind.NADD, null, ts.peek().line, ts.peek().col).add(left).add(parseTerm());
+            } else if (ts.match(TokenType.TMINS)) {
+                left = new StNode(StNodeKind.NSUB, null, ts.peek().line, ts.peek().col).add(left).add(parseTerm());
+            } else break;
+        }
+        return left;
     }
 
+    /**
+     * <term> ::= <fact> <term’>
+     * <term’> ::= * <fact> <term’> | / <fact> <term’> | % <fact> <term’> | ε
+     */
     private StNode parseTerm() {
-        return null;
+        StNode left = parseFact();
+        while(true) {
+            if(ts.match(TokenType.TSTAR)) {
+                left = new StNode(StNodeKind.NMUL, null, ts.peek().line, ts.peek().col).add(left).add(parseFact());
+            } else if (ts.match(TokenType.TDIVD)) {
+                left = new StNode(StNodeKind.NDIV, null, ts.peek().line, ts.peek().col).add(left).add(parseFact());
+            } else if (ts.match(TokenType.TPERC)) {
+                left = new StNode(StNodeKind.NMOD, null, ts.peek().line, ts.peek().col).add(left).add(parseFact());
+            } else break;
+        }
+        return left;
     }
 
+    /**
+     * <fact> ::= <exponent> <fact’> 
+     * <fact’> ::= ^ <exponent> <fact’> | ε 
+     */
     private StNode parseFact() {
-        return null;
+        StNode left = parseExpo();
+    
+        if (ts.match(TokenType.TCART)) {
+            Token caret = ts.peek(); // store location if you want
+            StNode right = parseFact(); // handles both <exponent> and <fact’>
+            return new StNode(StNodeKind.NPOW, null, caret.line, caret.col)
+                       .add(left)
+                       .add(right);
+        }
+    
+        return left;
     }
 
     private StNode parseExpo() {
@@ -167,10 +282,22 @@ public class Parser {
     }
 
     private StNode parsePrList() {
-        return null;
+        StNode n = new StNode(StNodeKind.NPRLST, null, ts.peek().line, ts.peek().col);
+
+        n.add(parsePrintItem());
+        while(ts.match(TokenType.TCOMA)) {
+            n.add(parsePrintItem());
+        }
+
+        return n;
     }
 
+    // printitem ::= <expr> | <string>
     private StNode parsePrintItem() {
-        return null;
+        if(ts.peek().tokenType == TokenType.TSTRG) {
+            Token s = ts.expect(TokenType.TSTRG);
+            return StNode.leaf(StNodeKind.NSTRG, s);
+        }
+        return parseExpr();
     }
 }

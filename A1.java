@@ -31,7 +31,7 @@ public class A1 {
             ErrorReporter er = new ErrorReporter(oc);
             Parser parser = new Parser(ts, table, er);
             StNode root = parser.parseProgram();
-            TreePrinter.print(root, 0);
+            TreePrinter.print(root);
 
         } catch(IOException e) {
             System.err.println("Error reading file: " + filename);

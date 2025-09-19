@@ -31,8 +31,7 @@ public class A1 {
             ErrorReporter er = new ErrorReporter(oc);
             Parser parser = new Parser(ts, table, er);
             StNode root = parser.parseProgram();
-
-            // Assumedly we would probs have something to print here as well, maybe a seperate class called TreePrinter or smthn to print the tree
+            TreePrinter.print(root, 0);
 
         } catch(IOException e) {
             System.err.println("Error reading file: " + filename);

@@ -1,24 +1,50 @@
 import java.util.*;
 
 enum StNodeKind {
-    
-    NPROG, NGLOB, NILIST, NINIT,
+
+    // program & sections
+    NPROG, NGLOB, NFUNCS, NMAIN,
+
+    // consts/types/arrays blocks
+    NILIST, NINIT,
     NTYPEL, NRTYPE, NATYPE, NFLIST,
-    NSDECL, NALIST, NARRD, NFUND,
-    NPLIST, NSIMP, NARRP, NARRC,
-    NDLIST, NFORL, NREPT, NASGNS,
-    NIFTH, NIFTE, NASGN, NPLEQ,
-    NMNEQ, NSTEA, NDVEQ, NINPUT,
-    NOUTP, NOUTL, NCALL, NRETN,
+    NSDECL, NALIST, NARRD,
+
+    // functions
+    NFUND, NPLIST, NSIMP, NARRP, NARRC,
+
+    // locals / decl lists
+    NDLIST, NSDLST,
+
+    // statements / control
+    NSTATS, NFORL, NREPT, NASGNS,
+    NIFTH, NIFTE,
+
+    // assignment & ops
+    NASGN, NPLEQ, NMNEQ, NSTEA, NDVEQ,
+
+    // I/O
+    NINPUT, NOUTP, NOUTL,
+
+    // calls / return
+    NCALL, NRETN, NFCALL,
+
+    // variables / lists
     NVLIST, NSIMV, NARRV, NAELT,
-    NEXPL, NBOOL, NNOT, NAND,
-    NOR, NXOR, NEQL, NNEQ,
-    NGRT, NLSS, NLEQ, NGEQ,
-    NADD, NSUB, NMUL, NDIV,
-    NMOD, NPOW, NILIT, NFLIT,
-    NTRUE, NFALS, NFCALL, NPRLST,
-    NSTRG, NUNDEF // error placeholder
-    
+    NEXPL, NPRLST,
+
+    // booleans / relations
+    NBOOL, NNOT, NAND, NOR, NXOR,
+    NEQL, NNEQ, NGRT, NLSS, NLEQ, NGEQ,
+
+    // arithmetic
+    NADD, NSUB, NMUL, NDIV, NMOD, NPOW,
+
+    // literals / strings
+    NILIT, NFLIT, NTRUE, NFALS, NSTRG,
+
+    // error placeholder
+    NUNDEF
 }
 
 public final class StNode {
@@ -66,7 +92,7 @@ public final class StNode {
     }
 
     // special placeholder for undefined node, keeps tree consistent
-    public static StNode undefAf(Token t) {
+    public static StNode undefAt(Token t) {
         return new StNode(StNodeKind.NUNDEF, null, 
                             (t != null ? t.line : -1), 
                             (t != null ? t.col : -1));

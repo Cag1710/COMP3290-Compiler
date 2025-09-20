@@ -172,7 +172,7 @@ public final class Lexer {
             }
             if (c == -1) { break; }     // EOF reached
         }
-        if (c == -1) { oc.commitBuffer(); } // need this check here again after the loop it was buggin when I had it above
+        //if (c == -1) { oc.commitBuffer(); } // need this check here again after the loop it was buggin when I had it above
         return token != null ? token : new Token(TokenType.T_EOF, "", tokLine, tokCol);
     }
 

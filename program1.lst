@@ -1,0 +1,40 @@
+1  /-- simple program to add three numbers together
+2  CD25 program1
+3  constants
+4      t is 14,
+5      s is true,
+6      is 8
+7  main
+8      x : integer,
+9      y : integer,
+10      z : integer,
+11      result: integer
+12  
+13  begin
+14  
+15      x = 1;
+16      y = 10;
+17      z = 5;
+18  
+19      result = x + y + z;
+20      Out << "Result:", result << Line;   /-- output should be 16
+21  
+22  end CD25 program1
+23  
+
+	ERRORS:
+-----------------------------------
+Syntax error: @ line: 4 | col: 10
+	expected 'main'
+
+Syntax error: @ line: 4 | col: 10
+	expected 'begin' before statements
+
+Syntax error: @ line: 4 | col: 10
+	expected 'end' after statements
+
+Syntax error: @ line: 4 | col: 10
+	expected trailing 'cd25'
+
+Syntax error: @ line: 4 | col: 10
+	expected identifier after trailing 'cd25'

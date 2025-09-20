@@ -14,6 +14,14 @@ public class Parser {
         TokenType.T_EOF    // safety
     );
 
+    private static final Set<TokenType> INIT_FOLLOW = Set.of(
+        TokenType.TCOMA,    // next init statement
+        TokenType.TTYPS,    // types block
+        TokenType.TARRS,    // arrays block
+        TokenType.TFUNC,    // funcs block
+        TokenType.TMAIN     // main
+    );
+
     public Parser(TokenStream ts, SymbolTable table, ErrorReporter er) {
         this.ts = ts;
         this.table = table;
@@ -30,7 +38,7 @@ public class Parser {
             prog.add(StNode.undefAt(ts.peek()));
         }
 
-        // CD25 prodId
+        // CD25 progId
         Token progId = ts.expect(TokenType.TIDEN);
         if(progId == null) {
             er.syntax("expected program identifier after 'cd25'", ts.peek());
@@ -49,7 +57,57 @@ public class Parser {
     }
 
     private StNode parseGlobals() {
-        return new StNode(StNodeKind.NGLOB, null, ts.peek().line, ts.peek().col);
+        StNode glob = new StNode(StNodeKind.NGLOB, null, ts.peek().line, ts.peek().col);
+        if (ts.expect(TokenType.TCONS) != null) {
+            glob.add(parseConsts());
+        }
+        if (ts.expect(TokenType.TTYPS) != null) {
+            glob.add(parseTypes());
+        }
+        if (ts.expect(TokenType.TARRS) != null) {
+            glob.add(parseArrays());
+        }
+        return glob;
+    }
+
+    private StNode parseConsts() {
+        StNode initList = new StNode(StNodeKind.NILIST, null, ts.peek().line, ts.peek().col);
+
+        initList.add(parseInit());
+
+        while(ts.match(TokenType.TCOMA)) {
+            initList.add(parseInit());
+        }
+
+        return initList;
+    }
+
+    // TODO: parseExpo() needs implementation to work
+    private StNode parseInit() {
+        StNode init = new StNode(StNodeKind.NINIT, null, ts.peek().line, ts.peek().col);
+        Token iden = ts.expect(TokenType.TIDEN);
+        if (iden == null) {
+            er.syntax("expected identifier in constant declaration", ts.peek());
+            ts.syncTo(INIT_FOLLOW);
+            return init;  // return dummy node to maintain AST
+        }
+        if (ts.expect(TokenType.TTTIS) == null) {
+            er.syntax("expected 'is' in constant declaration", ts.peek());
+        }
+
+        StNode expr = parseExpr();
+        init.add(expr);
+
+        // TODO add iden and its value from expr into the symbol table
+        return init;
+    }
+
+    private StNode parseTypes() {
+        return null;
+    }
+    
+    private StNode parseArrays() {
+        return null;
     }
 
     private StNode parseFunc() {

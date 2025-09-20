@@ -8,7 +8,7 @@ enum StNodeKind {
     // consts/types/arrays blocks
     NILIST, NINIT,
     NTYPEL, NRTYPE, NATYPE, NFLIST,
-    NSDECL, NALIST, NARRD,
+    NSDECL, NALIST, NARRD, NSTYPE,
 
     // functions
     NFUND, NPLIST, NSIMP, NARRP, NARRC,

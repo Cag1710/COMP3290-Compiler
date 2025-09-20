@@ -22,6 +22,21 @@ public class Parser {
         TokenType.TMAIN     // main
     );
 
+    private static final Set<TokenType> TYPE_FOLLOW = Set.of(
+        TokenType.TCOMA,
+        TokenType.TTEND,
+        TokenType.TARRS,
+        TokenType.TFUNC,
+        TokenType.TMAIN
+    );
+
+    private static final Set<TokenType> DECL_FOLLOW = Set.of(
+        TokenType.TTEND,
+        TokenType.TARRS,
+        TokenType.TFUNC,
+        TokenType.TMAIN
+    );
+
     public Parser(TokenStream ts, SymbolTable table, ErrorReporter er) {
         this.ts = ts;
         this.table = table;
@@ -82,7 +97,6 @@ public class Parser {
         return initList;
     }
 
-    // TODO: parseExpo() needs implementation to work
     private StNode parseInit() {
         Token iden = ts.expect(TokenType.TIDEN);
         if (iden == null) {
@@ -92,18 +106,123 @@ public class Parser {
         }
         if (ts.expect(TokenType.TTTIS) == null) {
             er.syntax("expected 'is' in constant declaration", ts.peek());
+            ts.syncTo(INIT_FOLLOW);
+            return new StNode(StNodeKind.NINIT, null, ts.peek().line, ts.peek().col);
         }
 
         StNode init = new StNode(StNodeKind.NINIT, iden.lexeme, ts.peek().line, ts.peek().col);
         StNode expr = parseExpr();
         init.add(expr);
 
-        // TODO add iden and its value from expr into the symbol table
         return init;
     }
 
     private StNode parseTypes() {
-        return null;
+        StNode typeList = new StNode(StNodeKind.NTYPEL, null, ts.peek().line, ts.peek().col);
+
+        typeList.add(parseType());
+
+        while(ts.match(TokenType.TTEND)) {
+            // breakout of type block if another block is encountered
+            if (ts.peek().tokenType == TokenType.TARRS || ts.peek().tokenType == TokenType.TFUNC || ts.peek().tokenType == TokenType.TMAIN) {
+                break;
+            }
+            typeList.add(parseType());
+        }
+        return typeList;
+    }
+
+    private StNode parseType() {
+        Token iden = ts.expect(TokenType.TIDEN);
+        if (iden == null) {
+            er.syntax("expected an identifier for the type", iden);
+            ts.syncTo(TYPE_FOLLOW);
+            return StNode.undefAt(iden);
+        }
+        if (ts.expect(TokenType.TTTIS) == null) {
+            er.syntax("expected 'is' in type declaration", ts.peek());
+            ts.syncTo(TYPE_FOLLOW);
+            return StNode.undefAt(iden);
+        }
+        // type is an array
+        if (ts.peek().tokenType == TokenType.TARAY) {
+            ts.consume();
+            return parseArrayType(iden);
+        }
+        // type is a struct
+        StNode structType =  new StNode(StNodeKind.NRTYPE, null, ts.peek().line, ts.peek().col);
+        structType.add(new StNode(StNodeKind.NSIMV, iden.lexeme, ts.peek().line, ts.peek().col));
+        structType.add(parseFields());
+        return structType;
+    }
+
+    private StNode parseFields() {
+        StNode fieldList = new StNode(StNodeKind.NFLIST, null, ts.peek().line, ts.peek().col);
+        
+        fieldList.add(parseDecl());
+
+        while(ts.match(TokenType.TCOMA)) {
+            fieldList.add(parseDecl());
+        }
+        return fieldList;
+    }
+
+    private StNode parseDecl() {
+        StNode decl = new StNode(StNodeKind.NSDECL, null, ts.peek().line, ts.peek().col);
+        Token iden = ts.expect(TokenType.TIDEN);
+        if (iden == null) {
+            er.syntax("expected identifier in simple declaration", ts.peek());
+            ts.syncTo(DECL_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        decl.add(new StNode(StNodeKind.NSIMV, iden.lexeme, ts.peek().line, ts.peek().col));
+        if (ts.expect(TokenType.TCOLN) == null) {
+            er.syntax("expected ':' in simple declaration", ts.peek());
+            ts.syncTo(DECL_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        Token stype = ts.peek();
+        if (stype.tokenType == TokenType.TINTG || stype.tokenType == TokenType.TREAL || stype.tokenType == TokenType.TBOOL) {
+            ts.consume();
+            decl.add(StNode.leaf(StNodeKind.NSTYPE, stype));    // added custom StNode here
+        }
+        else {
+            er.syntax("expected type in simple declaration", ts.peek());
+            ts.syncTo(DECL_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        return decl;
+    }
+
+    private StNode parseArrayType(Token iden) {
+        StNode node = new StNode(StNodeKind.NATYPE, null, ts.peek().line, ts.peek().col);
+        // add typeId child
+        node.add(new StNode(StNodeKind.NSIMV, iden.lexeme, ts.peek().line, ts.peek().col));
+        if (ts.expect(TokenType.TLBRK) == null) {
+            er.syntax("expected '[' for array type declaration", ts.peek());
+            ts.syncTo(TYPE_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        // add expr child
+        node.add(parseExpr());
+        if (ts.expect(TokenType.TRBRK) == null) {
+            er.syntax("expected ']' for array type declaration", ts.peek());
+            ts.syncTo(TYPE_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        if (ts.expect(TokenType.TTTOF) == null) {
+            er.syntax("expected 'of' for array type declaration", ts.peek());
+            ts.syncTo(TYPE_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        Token structId = ts.expect(TokenType.TIDEN);
+        if ( structId == null) {
+            er.syntax("expected a struct identifier for the type", ts.peek());
+            ts.syncTo(TYPE_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        node.add(new StNode(StNodeKind.NSIMV, structId.lexeme, ts.peek().line, ts.peek().col));
+        return node;
     }
     
     private StNode parseArrays() {

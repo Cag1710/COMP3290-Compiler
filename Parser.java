@@ -97,7 +97,6 @@ public class Parser {
         return initList;
     }
 
-    // TODO: parseExpo() needs implementation to work
     private StNode parseInit() {
         Token iden = ts.expect(TokenType.TIDEN);
         if (iden == null) {
@@ -115,7 +114,6 @@ public class Parser {
         StNode expr = parseExpr();
         init.add(expr);
 
-        // TODO add iden and its value from expr into the symbol table
         return init;
     }
 

@@ -37,6 +37,14 @@ public class Parser {
         TokenType.TMAIN
     );
 
+    private static final Set<TokenType> ARRDECL_FOLLOW = Set.of(
+        TokenType.TCOMA,
+        TokenType.TFUNC,
+        TokenType.TMAIN
+    );
+
+    
+
     public Parser(TokenStream ts, SymbolTable table, ErrorReporter er) {
         this.ts = ts;
         this.table = table;
@@ -226,7 +234,38 @@ public class Parser {
     }
     
     private StNode parseArrays() {
-        return null;
+        StNode arrDecls = new StNode(StNodeKind.NALIST, null, ts.peek().line, ts.peek().col);
+        
+        arrDecls.add(parseArrDecl());
+
+        while(ts.match(TokenType.TCOMA)) {
+            arrDecls.add(parseDecl());
+        }
+        return arrDecls;
+    }
+
+    private StNode parseArrDecl() {
+        StNode decl = new StNode(StNodeKind.NARRD, null, ts.peek().line, ts.peek().col);
+        Token iden = ts.expect(TokenType.TIDEN);
+        if (iden == null) {
+            er.syntax("expected identifier for array declaration", ts.peek());
+            ts.syncTo(ARRDECL_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        decl.add(StNode.leaf(StNodeKind.NSIMV, iden));
+        if (ts.expect(TokenType.TCOLN) == null) {
+            er.syntax("expected ':' in array declaration", ts.peek());
+            ts.syncTo(ARRDECL_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        iden = ts.expect(TokenType.TIDEN);
+        if (iden == null) {
+            er.syntax("expected type identifier for array declaration", ts.peek());
+            ts.syncTo(ARRDECL_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        decl.add(StNode.leaf(StNodeKind.NSIMV, iden));
+        return decl;
     }
 
     private StNode parseFunc() {

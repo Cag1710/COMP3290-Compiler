@@ -244,38 +244,281 @@ public class Parser {
     }
 
     private StNode parseAsgnOrCall() {
+        if (ts.peek().tokenType != TokenType.TIDEN) {
+            er.syntax("expected identifier to start assignment or call", ts.peek());
+            return StNode.undefAt(ts.peek());
+        }
+
+        if (ts.lookahead(1).tokenType == TokenType.TLPAR) {
+            return parseCallStat();
+        }
+
+        return parseAssignStat();
+    }
+
+    // <asgnstat> ::= <var> <asgnop> <bool> 
+    private StNode parseAssignStat() {
+        StNode left = parseVar();
+        if (left == null) {
+            er.syntax("invalid variable in assignment", ts.peek());
+            return StNode.undefAt(ts.peek());
+        }
+
+        StNode op = parseAsgnOp();
+        if (op == null) {
+            er.syntax("expected assignment operator (=, +=, -=, *=, /=)", ts.peek());
+            return StNode.undefAt(ts.peek());
+        }
+        
+        StNode right = parseBool();
+        if (right == null) {
+            er.syntax("expected expression after assignment operator", ts.peek());
+            right = StNode.undefAt(ts.peek());
+        }
+
+        
+        return op.add(left).add(right);
+    }
+
+    /**
+     * <callstat> ::= <id> ( <calltail> ) 
+     * <calltail> ::= <elist> | ε 
+     */
+    private StNode parseCallStat() {
+        int line = ts.peek().line;
+        int col = ts.peek().col;
+        StNode call = parseFnCall();
+        return new StNode(StNodeKind.NCALL, null, line, col).add(call);
+    }
+
+    private StNode parseAsgnOp() {
+        Token t = ts.peek();
+        if (t.tokenType == TokenType.TEQUL) {
+            ts.consume();
+            return new StNode(StNodeKind.NASGN, null, t.line, t.col);
+        } else if (t.tokenType == TokenType.TPLEQ) {
+            ts.consume();
+            return new StNode(StNodeKind.NPLEQ, null, t.line, t.col);
+        } else if (t.tokenType == TokenType.TMNEQ) {
+            ts.consume();
+            return new StNode(StNodeKind.NMNEQ, null, t.line, t.col);
+        } else if (t.tokenType == TokenType.TSTEQ) {
+            ts.consume();
+            return new StNode(StNodeKind.NSTEA, null, t.line, t.col);
+        } else if (t.tokenType == TokenType.TDVEQ) {
+            ts.consume();
+            return new StNode(StNodeKind.NDVEQ, null, t.line, t.col);
+        }
         return null;
     }
 
+    // <returnstat> ::= return void | return <expr>
     private StNode parseReturnStat() {
-        return null;
+        Token r = ts.expect(TokenType.TRETN);
+        if (r == null) {
+            er.syntax("expected 'return'", ts.peek());
+            return StNode.undefAt(ts.peek());
+        }
+
+        if (ts.match(TokenType.TVOID)) {
+            return new StNode(StNodeKind.NRETN, null, r.line, r.col);
+        }
+
+        StNode expr = parseExpr();
+        if(expr == null) {
+            er.syntax("expected 'expression' after return statement", ts.peek());
+            return new StNode(StNodeKind.NRETN, null, r.line, r.col).add(StNode.undefAt(ts.peek()));
+        }
+
+        return new StNode(StNodeKind.NRETN, null, r.line, r.col).add(expr);
     }
 
+    // <vlist> ::= <var> { , <var> } 
     private StNode parseVList() {
-        return null;
+        StNode n = new StNode(StNodeKind.NVLIST, null, ts.peek().line, ts.peek().col);
+
+        n.add(parseVar());
+        while(ts.match(TokenType.TCOMA)) {
+            n.add(parseVar());
+        }
+
+        return n;
     }
 
+    /**
+     * <var> ::= <id> <vartail> 
+     * <vartail> ::= [<expr>] <vartail2> | ε 
+     * <vartail2> ::= .<id> | ε 
+     */
     private StNode parseVar() {
-        return null;
+        Token id = ts.expect(TokenType.TIDEN);
+
+        if (id == null) {
+            er.syntax("expected variable name (identifier)", ts.peek());
+            return StNode.undefAt(ts.peek());
+        }
+
+        StNode base = StNode.leaf(StNodeKind.NSIMV, id);
+
+        if (ts.match(TokenType.TLBRK)) {
+            StNode index = parseExpr();
+
+            if (ts.expect(TokenType.TRBRK) == null) {
+                er.syntax("expected closing ']' after expression", ts.peek());
+                return StNode.undefAt(ts.peek());
+            }
+
+            if (ts.match(TokenType.TDOTT)) {
+                Token field = ts.expect(TokenType.TIDEN);
+                if (field == null) {
+                    er.syntax("expected identifier after '.'", ts.peek());
+                    return StNode.undefAt(ts.peek());
+                }
+
+                return new StNode(StNodeKind.NARRV, null, id.line, id.col).add(base).add(index).add(StNode.leaf(StNodeKind.NSIMV, field));
+            }
+
+            return new StNode(StNodeKind.NAELT, null, id.line, id.col).add(base).add(index);
+        }
+
+        return base;
     }
 
+    // <elist> ::= <bool> { , <bool> }
     private StNode parseEList() {
-        return null;
+        StNode n = new StNode(StNodeKind.NEXPL, null, ts.peek().line, ts.peek().col);
+
+        n.add(parseBool());
+        while(ts.match(TokenType.TCOMA)) {
+            n.add(parseBool());
+        }
+
+        return n;
     }
 
+    /**
+     * <bool> ::= <rel> <bool’>
+     * <bool’> ::= <logop> <rel> <bool’> | ε 
+     */
     private StNode parseBool() {
-        return null;
+        StNode left = parseRel();
+        if (left == null) {
+            er.syntax("expected relational expression", ts.peek());
+            return StNode.undefAt(ts.peek());
+        }
+
+        while(true) {
+            StNode logOp = parseLogOp();
+            if (logOp == null) {
+                break;
+            }
+
+            StNode right = parseRel();
+            if (right == null) {
+                er.syntax("expected relational expression after boolean operator", ts.peek());
+                return StNode.undefAt(ts.peek());
+            }
+
+            logOp.add(left).add(right);
+            left = logOp;
+        }
+        return left;
     }
 
+    /**
+     * <rel> ::= not <expr> <relop> <expr> | <expr> <relTail> 
+     * <relTail> ::= <relop> <expr> | ε
+     */
     private StNode parseRel() {
-        return null;
+        Token t = ts.peek();
+
+        // not <expr> <relop> <expr>
+        if (t.tokenType == TokenType.TNOTT) {
+            ts.consume();
+
+            StNode left = parseExpr();
+            if (left == null) {
+                er.syntax("expected expression after 'not'", ts.peek());
+                return StNode.undefAt(ts.peek());
+            }
+
+            StNode op = parseRelOp();
+            if (op == null) {
+                er.syntax("expected relational operator after expression", ts.peek());
+                return StNode.undefAt(ts.peek());
+            }
+
+            StNode right = parseExpr();
+            if (right == null) {
+                er.syntax("expected expression after relational operator", ts.peek());
+                return StNode.undefAt(ts.peek());
+            }
+
+            op.add(left).add(right);
+            return new StNode(StNodeKind.NNOT, null, t.line, t.col).add(op);
+        }
+
+        // <expr> <relTail>
+        StNode left = parseExpr();
+        if (left == null) {
+            er.syntax("expected expression in relational", ts.peek());
+            return StNode.undefAt(ts.peek());
+        }
+
+        // <relop> <expr> | ε
+        StNode op = parseRelOp();
+        if (op == null) {
+            return left;
+        }
+
+        StNode right = parseExpr();
+        if (right == null) {
+            er.syntax("expected expressionafter relational operator", ts.peek());
+            return StNode.undefAt(ts.peek());
+        }
+
+        return op.add(left).add(right);
+
     }
 
+    // <logop> ::= and | or | xor
     private StNode parseLogOp() {
+        Token t = ts.peek();
+        if (t.tokenType == TokenType.TTAND) {
+            ts.consume();
+            return new StNode(StNodeKind.NAND, null, t.line, t.col);
+        } else if (t.tokenType == TokenType.TTTOR) {
+            ts.consume();
+            return new StNode(StNodeKind.NOR, null, t.line, t.col);
+        } else if (t.tokenType == TokenType.TTXOR) {
+            ts.consume();
+            return new StNode(StNodeKind.NXOR, null, t.line, t.col);
+        }
         return null;
     }
 
+    // <relop> ::= == | != || > | <= | < | >= 
     private StNode parseRelOp() {
+        Token t = ts.peek();
+        if (t.tokenType == TokenType.TEQEQ) {
+            ts.consume();
+            return new StNode(StNodeKind.NEQL, null, t.line, t.col);
+        } else if (t.tokenType == TokenType.TNEQL) {
+            ts.consume();
+            return new StNode(StNodeKind.NNEQ, null, t.line, t.col);
+        } else if (t.tokenType == TokenType.TGRTR) {
+            ts.consume();
+            return new StNode(StNodeKind.NGRT, null, t.line, t.col);
+        } else if (t.tokenType == TokenType.TGEQL) {
+            ts.consume();
+            return new StNode(StNodeKind.NGEQ, null, t.line, t.col);
+        } else if (t.tokenType == TokenType.TLESS) {
+            ts.consume();
+            return new StNode(StNodeKind.NLSS, null, t.line, t.col);
+        } else if (t.tokenType == TokenType.TLEQL) {
+            ts.consume();
+            return new StNode(StNodeKind.NLEQ, null, t.line, t.col);
+        }
         return null;
     }
 
@@ -331,6 +574,7 @@ public class Parser {
         return left;
     }
 
+    // <exponent> ::= <var> | <inlit> | <reallit> | <fncall> | true | false | (<bool>) 
     private StNode parseExpo() {
         Token expo = ts.peek();
         if (expo.tokenType == TokenType.TILIT) {
@@ -349,19 +593,56 @@ public class Parser {
             ts.consume();
             return new StNode(StNodeKind.NFALS, null, expo.line, expo.col);
         }
-        // TODO: need support for....
-        // bool
-        // var
-        // fncall
-        return null;
+        if (expo.tokenType == TokenType.TIDEN) {
+            if (ts.lookahead(1).tokenType == TokenType.TLPAR) {
+                return parseFnCall();
+            }
+            return parseVar();
+        }
+        if (expo.tokenType == TokenType.TLPAR) {
+            ts.consume();
+            StNode inner = parseBool();
+            if (ts.expect(TokenType.TRPAR) == null) {
+                er.syntax("expected ')' to close '('", expo);
+                return StNode.undefAt(ts.peek());
+            }
+            return inner;
+        }
+        er.syntax("expected operand (<var> | <inlit> | <reallit> | <fncall> | true | false | (<bool>))", expo);
+        return StNode.undefAt(expo);
     }
 
 
-
+    /**
+     * <fncall> ::= <id> ( <fntail> ) 
+     * <fntail> ::= <elist> | ε
+     */
     private StNode parseFnCall() {
-        return null;
+        Token name = ts.expect(TokenType.TIDEN);
+        if (name == null) {
+            er.syntax("expected function name (identifier)", ts.peek());
+            return StNode.undefAt(ts.peek());
+        }
+        if (ts.expect(TokenType.TLPAR) == null) {
+            er.syntax("expected '(' after function name", ts.peek());
+            return StNode.undefAt(ts.peek());
+        }
+
+        StNode args;
+        if (ts.peek().tokenType == TokenType.TRPAR) {
+            ts.consume();
+            args = new StNode(StNodeKind.NEXPL, null, name.line, name.col);
+        } else {
+            args = parseEList();
+
+            if (ts.expect(TokenType.TRPAR) == null) {
+                er.syntax("expected ')' after argument list", name);
+            }
+        }
+        return new StNode(StNodeKind.NFCALL, null, name.line, name.col).add(StNode.leaf(StNodeKind.NSIMV, name)).add(args);
     }
 
+    // <prlist> ::= <printitem> { , <printitem>  }
     private StNode parsePrList() {
         StNode n = new StNode(StNodeKind.NPRLST, null, ts.peek().line, ts.peek().col);
 

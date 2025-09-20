@@ -44,6 +44,11 @@ final class TokenStream {
         return p; // return the token
     }
 
+    // consumes the current token
+    void consume() {
+        i++;
+    }
+
     /**
      * Used to skip over until we find a new safe point
      * e.g. x = 5 y = 10;

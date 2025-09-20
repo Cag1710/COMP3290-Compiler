@@ -84,17 +84,17 @@ public class Parser {
 
     // TODO: parseExpo() needs implementation to work
     private StNode parseInit() {
-        StNode init = new StNode(StNodeKind.NINIT, null, ts.peek().line, ts.peek().col);
         Token iden = ts.expect(TokenType.TIDEN);
         if (iden == null) {
             er.syntax("expected identifier in constant declaration", ts.peek());
             ts.syncTo(INIT_FOLLOW);
-            return init;  // return dummy node to maintain AST
+            return new StNode(StNodeKind.NINIT, null, ts.peek().line, ts.peek().col);  // return dummy node to maintain AST
         }
         if (ts.expect(TokenType.TTTIS) == null) {
             er.syntax("expected 'is' in constant declaration", ts.peek());
         }
 
+        StNode init = new StNode(StNodeKind.NINIT, iden.lexeme, ts.peek().line, ts.peek().col);
         StNode expr = parseExpr();
         init.add(expr);
 
@@ -332,8 +332,31 @@ public class Parser {
     }
 
     private StNode parseExpo() {
+        Token expo = ts.peek();
+        if (expo.tokenType == TokenType.TILIT) {
+            ts.consume();
+            return new StNode(StNodeKind.NILIT, expo.lexeme, expo.line, expo.col);
+        }
+        if (expo.tokenType == TokenType.TFLIT) {
+            ts.consume();
+            return new StNode(StNodeKind.NFLIT, expo.lexeme, expo.line, expo.col);
+        }
+        if (expo.tokenType == TokenType.TTRUE) {
+            ts.consume();
+            return new StNode(StNodeKind.NTRUE, null, expo.line, expo.col);
+        }
+        if (expo.tokenType == TokenType.TFALS) {
+            ts.consume();
+            return new StNode(StNodeKind.NFALS, null, expo.line, expo.col);
+        }
+        // TODO: need support for....
+        // bool
+        // var
+        // fncall
         return null;
     }
+
+
 
     private StNode parseFnCall() {
         return null;

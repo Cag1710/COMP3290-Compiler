@@ -24,17 +24,23 @@
 
 	ERRORS:
 -----------------------------------
-Syntax error: @ line: 4 | col: 10
-	expected 'main'
+Syntax error: @ line: 6 | col: 5
+	expected identifier in constant declaration
 
-Syntax error: @ line: 4 | col: 10
+Syntax error: @ line: 8 | col: 5
 	expected 'begin' before statements
 
-Syntax error: @ line: 4 | col: 10
-	expected 'end' after statements
+Syntax error: @ line: 8 | col: 5
+	expected ';' after statement
 
-Syntax error: @ line: 4 | col: 10
-	expected trailing 'cd25'
+Syntax error: @ line: 16 | col: 5
+	expected ';' after statement
 
-Syntax error: @ line: 4 | col: 10
-	expected identifier after trailing 'cd25'
+Syntax error: @ line: 17 | col: 5
+	expected ';' after statement
+
+Syntax error: @ line: 19 | col: 5
+	expected ';' after statement
+
+Syntax error: @ line: 20 | col: 23
+	expected ';' after statement

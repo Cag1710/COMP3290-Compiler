@@ -1,0 +1,46 @@
+1  /-- simple program to add three numbers together
+2  CD25 program1
+3  constants
+4      t is 14,
+5      s is true,
+6      is 8
+7  main
+8      x : integer,
+9      y : integer,
+10      z : integer,
+11      result: integer
+12  
+13  begin
+14  
+15      x = 1;
+16      y = 10;
+17      z = 5;
+18  
+19      result = x + y + z;
+20      Out << "Result:", result << Line;   /-- output should be 16
+21  
+22  end CD25 program1
+23  
+
+	ERRORS:
+-----------------------------------
+Syntax error: @ line: 6 | col: 5
+	expected identifier in constant declaration
+
+Syntax error: @ line: 8 | col: 5
+	expected 'begin' before statements
+
+Syntax error: @ line: 8 | col: 5
+	expected ';' after statement
+
+Syntax error: @ line: 16 | col: 5
+	expected ';' after statement
+
+Syntax error: @ line: 17 | col: 5
+	expected ';' after statement
+
+Syntax error: @ line: 19 | col: 5
+	expected ';' after statement
+
+Syntax error: @ line: 20 | col: 23
+	expected ';' after statement

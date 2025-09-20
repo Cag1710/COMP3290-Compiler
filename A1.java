@@ -31,6 +31,7 @@ public class A1 {
             ErrorReporter er = new ErrorReporter(oc);
             Parser parser = new Parser(ts, table, er);
             StNode root = parser.parseProgram();
+            oc.commitBuffer();  // outputs the errors found
             TreePrinter.print(root);
 
         } catch(IOException e) {

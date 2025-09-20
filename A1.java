@@ -34,6 +34,8 @@ public class A1 {
             oc.commitBuffer();  // outputs the errors found
             TreePrinter.print(root);
 
+            System.out.println(er.all());
+
         } catch(IOException e) {
             System.err.println("Error reading file: " + filename);
         }

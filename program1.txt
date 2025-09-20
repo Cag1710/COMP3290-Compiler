@@ -1,0 +1,19 @@
+/-- simple program to add three numbers together
+CD25 program1
+
+main
+    x : integer,
+    y : integer,
+    z : integer,
+    result: integer
+
+begin
+
+    x = 1;
+    y = 10;
+    z = 5;
+
+    result = x + y + z;
+    Out << "Result:", result << Line;   /-- output should be 16
+
+end CD25 program1

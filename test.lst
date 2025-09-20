@@ -1,0 +1,8 @@
+1  cd25 Test
+2  main
+3  begin 
+4  	Out << Line;
+5  	Out << "hi" << Line;
+6  	Out << "A", "B", "C" << Line;
+7  end cd25 Test
+8  

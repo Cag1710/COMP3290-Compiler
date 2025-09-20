@@ -37,6 +37,21 @@ public class Parser {
         TokenType.TMAIN
     );
 
+    private static final Set<TokenType> ASGN_OPS = Set.of(
+        TokenType.TEQUL,  // =
+        TokenType.TPLEQ,  // +=
+        TokenType.TMNEQ,  // -=
+        TokenType.TSTEQ,  // *=
+        TokenType.TDVEQ   // /=
+    );
+
+    private static final Set<TokenType> STAT_START = Set.of(
+        TokenType.TINPT,  // In
+        TokenType.TOUTP,  // Out
+        TokenType.TRETN,  // Return
+        TokenType.TIDEN   // Asgn/Call
+    );
+
     private static final Set<TokenType> ARRDECL_FOLLOW = Set.of(
         TokenType.TCOMA,
         TokenType.TFUNC,
@@ -502,8 +517,8 @@ public class Parser {
         while(startsStat(ts.peek().tokenType)) {
             stats.add(parseStat());
             if(ts.expect(TokenType.TSEMI) == null) {
-                er.syntax("expected ';' after statement", ts.peek());
-                ts.syncTo(STAT_FOLLOW);
+                er.syntax("expected ';' after statement", ts.previous());
+                ts.syncToEither(STAT_FOLLOW, STAT_START);
                 ts.match(TokenType.TSEMI);
             }
         }
@@ -523,8 +538,17 @@ public class Parser {
         if (t == TokenType.TINPT || t == TokenType.TOUTP) return parseIoStat();
         if (t == TokenType.TRETN) return parseReturnStat();
         if (t == TokenType.TIDEN) return parseAsgnOrCall();
+
         er.syntax("invalid statement start", ts.peek());
         return StNode.undefAt(ts.peek());
+
+    }
+
+    private static boolean isPureVarNode(StNode n) {
+        if (n == null) return false;
+        return n.kind == StNodeKind.NSIMV 
+            || n.kind == StNodeKind.NAELT 
+            || n.kind == StNodeKind.NARRV;
     }
 
     /**
@@ -593,16 +617,26 @@ public class Parser {
             return StNode.undefAt(ts.peek());
         }
 
+        Token opTok = ts.peek();
         StNode op = parseAsgnOp();
         if (op == null) {
             er.syntax("expected assignment operator (=, +=, -=, *=, /=)", ts.peek());
             return StNode.undefAt(ts.peek());
         }
         
+        TokenType nxt = ts.peek().tokenType;
+        if (nxt == TokenType.TSEMI || STAT_FOLLOW.contains(nxt)) {
+            er.syntax("expected expression after assignment operator", opTok);
+            return op.add(left).add(StNode.undefAt(opTok));
+        }
+
+        int m = ts.mark();
         StNode right = parseBool();
-        if (right == null) {
-            er.syntax("expected expression after assignment operator", ts.peek());
-            right = StNode.undefAt(ts.peek());
+
+        if (right == null || (isPureVarNode(right) && ASGN_OPS.contains(ts.peek().tokenType))) {
+            ts.reset(m); // roll back
+            er.syntax("expected expression after assignment operator", opTok);
+            right = StNode.undefAt(opTok);
         }
 
         

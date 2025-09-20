@@ -28,7 +28,7 @@ final class TokenStream {
     // attempts to consume the current token iff it matches the expected tt, used when a token is optional
     boolean match(TokenType tt) {
         if(peek().tokenType == tt) { // inspects the current token
-            i++; // consume the token
+            consume(); // consume the token
             return true; // matched and consumed
         }
         return false; // did not match and did not consume
@@ -40,13 +40,29 @@ final class TokenStream {
         if(p.tokenType != tt) { // compare current token against what we require
             return null; // doesn't match, we dont advance, return null
         }
-        i++; // if it did match, consume it
+        consume(); // if it did match, consume it
         return p; // return the token
     }
 
     // consumes the current token
     void consume() {
         i++;
+    }
+
+    Token previous() {
+        int j = i - 1;
+        if (j < 0) j = 0;                    // before start → clamp
+        if (j >= tokens.size()) j = tokens.size() - 1; // past end → clamp
+        return tokens.get(j);
+    }
+
+    int mark() { return i; }
+
+    void reset(int pos) {
+        // clamp to [0, tokens.size()-1]
+        if (pos < 0) pos = 0;
+        if (pos >= tokens.size()) pos = tokens.size() - 1;
+        i = pos;
     }
 
     /**
@@ -60,6 +76,14 @@ final class TokenStream {
     void syncTo(Set<TokenType> follow) { // follow is a set of token types that are considered safe sync points e.g. semicolons, end, else etc.
         while(i < tokens.size() && !follow.contains(peek().tokenType)) { // dont go past the end of the token list and while the current token is not one of the "safe" ones
             i++; // skip the current token
+        }
+    }
+
+    void syncToEither(Set<TokenType> follow, Set<TokenType> starts) {
+        while (i < tokens.size()) {
+            TokenType t = peek().tokenType;
+            if (follow.contains(t) || starts.contains(t)) break;
+            i++;
         }
     }
 }

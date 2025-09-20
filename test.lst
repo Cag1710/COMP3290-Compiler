@@ -1,8 +1,17 @@
 1  cd25 Test
 2  main
-3  begin 
-4  	Out << Line;
-5  	Out << "hi" << Line;
-6  	Out << "A", "B", "C" << Line;
-7  end cd25 Test
-8  
+3  	i : integer
+4  begin 
+5  	Out << Line;
+6  	Out << "hi" << Line;
+7  	Out << "A", "B", "C" << Line;
+8  end cd25 Test
+9  
+
+	ERRORS:
+-----------------------------------
+Syntax error: @ line: 3 | col: 2
+	expected 'begin' before statements
+
+Syntax error: @ line: 3 | col: 2
+	expected ';' after statement

@@ -1,0 +1,28 @@
+/-- basic program that prints out numbers 1-10 to console
+CD25 program2
+
+types
+    Number is
+        x : integer
+    end
+    ArrayType is array [10] of Number end
+
+arrays
+    arr : ArrayType
+
+main
+    x : integer,
+    i : integer
+
+begin
+    /-- initialise all values in arr to 1-10
+    repeat (x = 0)
+        arr[x].x = x + 1;
+        x += 1;
+    until x == 10
+
+    /-- print out all values in the array
+    for (i = 0; i <= 10)
+        Out << arr[i].x << Line;
+    end
+end CD25 program2

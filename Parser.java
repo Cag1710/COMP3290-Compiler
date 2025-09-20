@@ -43,6 +43,24 @@ public class Parser {
         TokenType.TMAIN
     );
 
+    private static final Set<TokenType> FUNC_FOLLOW = Set.of(
+        TokenType.TFUNC,
+        TokenType.TMAIN
+    );
+
+    private static final Set<TokenType> PARAM_FOLLOW = Set.of(
+        TokenType.TCOMA,
+        TokenType.TTEND,
+        TokenType.TMAIN
+    );
+
+    private static final Set<TokenType> DLIST_FOLLOW = Set.of(
+        TokenType.TCOMA,
+        TokenType.TBEGN,
+        TokenType.TTEND,
+        TokenType.TMAIN
+    );
+
     
 
     public Parser(TokenStream ts, SymbolTable table, ErrorReporter er) {
@@ -72,7 +90,9 @@ public class Parser {
 
         prog.add(parseGlobals());
 
-        // prog.add(parseFunc());
+        if (ts.peek().tokenType == TokenType.TFUNC) {
+            prog.add(parseFuncs());
+        }
 
         prog.add(parseMainBody());
 
@@ -239,7 +259,7 @@ public class Parser {
         arrDecls.add(parseArrDecl());
 
         while(ts.match(TokenType.TCOMA)) {
-            arrDecls.add(parseDecl());
+            arrDecls.add(parseArrDecl());
         }
         return arrDecls;
     }
@@ -268,9 +288,160 @@ public class Parser {
         return decl;
     }
 
+    private StNode parseFuncs() {
+        StNode funcs = new StNode(StNodeKind.NFUNCS, null, ts.peek().line, ts.peek().col);
+        
+        funcs.add(parseFunc());
+
+        while (ts.match(TokenType.TTEND)) {
+            if (ts.peek().tokenType == TokenType.TMAIN) {
+                break;
+            }
+            funcs.add(parseFunc());
+        }
+        return funcs;
+    }
+
     private StNode parseFunc() {
-        StNode temp = new StNode(null, null, 0, 0);
-        return temp;
+        StNode func = new StNode(StNodeKind.NFUND, null, ts.peek().line, ts.peek().col);
+        if (ts.expect(TokenType.TFUNC) == null) {
+            er.syntax("expected 'func' for function declaration", ts.peek());
+            ts.syncTo(FUNC_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        Token iden = ts.expect(TokenType.TIDEN);
+        if (iden == null) {
+            er.syntax("expected identifier for function declaration", ts.peek());
+            ts.syncTo(FUNC_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        func.add(StNode.leaf(StNodeKind.NSIMV, iden));
+        if (ts.expect(TokenType.TLPAR) == null) {
+            er.syntax("expected '(' in function declaration", ts.peek());
+            ts.syncTo(FUNC_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        // plist
+        if (ts.peek().tokenType != TokenType.TRPAR) {
+            func.add(parseParams());
+        }
+        if (ts.expect(TokenType.TRPAR) == null) {
+            er.syntax("expected ')' in function declaration", ts.peek());
+            ts.syncTo(FUNC_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        if (ts.expect(TokenType.TCOLN) == null) {
+            er.syntax("expected ':' in function declaration", ts.peek());
+            ts.syncTo(FUNC_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        func.add(parseReturnType());
+        if (ts.peek().tokenType != TokenType.TBEGN) {
+            func.add(parseDList());
+        }
+        if (ts.expect(TokenType.TBEGN) == null) {
+            er.syntax("expected 'begin' in function body", ts.peek());
+            ts.syncTo(FUNC_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        func.add(parseStats());
+        return func;
+    }
+
+    private StNode parseDList() {
+        StNode dlist = new StNode(StNodeKind.NDLIST, null, ts.peek().line, ts.peek().col);
+        
+        dlist.add(parseDListItem());
+
+        while (ts.match(TokenType.TCOMA)) {
+            if (ts.peek().tokenType == TokenType.TBEGN) {
+                break;
+            }
+            dlist.add(parseDListItem());
+        }
+        return dlist;
+    }
+
+    private StNode parseDListItem() {
+        Token iden = ts.expect(TokenType.TIDEN);
+        if (iden == null) {
+            er.syntax("expected identifier in local declaration", ts.peek());
+            ts.syncTo(DLIST_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        if (ts.expect(TokenType.TCOLN) == null) {
+            er.syntax("expected ':' in local declaration", ts.peek());
+            ts.syncTo(DLIST_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        Token type = ts.peek();
+        if (type.tokenType == TokenType.TINTG || type.tokenType == TokenType.TREAL || type.tokenType == TokenType.TBOOL) {
+            StNode decl = new StNode(StNodeKind.NSDECL, null, ts.peek().line, ts.peek().col);
+            decl.add(StNode.leaf(StNodeKind.NSIMV, iden));
+            decl.add(StNode.leaf(StNodeKind.NSTYPE, type));
+            ts.consume();
+            return decl;
+        }
+        return parseArrDecl();
+    }
+
+    private StNode parseReturnType() {
+        Token rtype = ts.peek();
+        if (rtype.tokenType == TokenType.TVOID || rtype.tokenType == TokenType.TINTG || rtype.tokenType == TokenType.TREAL || rtype.tokenType == TokenType.TBOOL) {
+            StNode type = new StNode(StNodeKind.NSTYPE, rtype.lexeme, ts.peek().line, ts.peek().col);
+            ts.consume();
+            return type;
+        }
+        else {
+            er.syntax("unexpected function return type", ts.peek());
+            ts.syncTo(FUNC_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+    }
+
+    private StNode parseParams() {
+        StNode params = new StNode(StNodeKind.NPLIST, null, ts.peek().line, ts.peek().col);
+        
+        params.add(parseParam());
+
+        while (ts.match(TokenType.TCOMA)) {
+            params.add(parseParam());
+        }
+        return params; 
+    }
+
+    private StNode parseParam() {
+        if (ts.match(TokenType.TCNST)) {
+            StNode constParam = new StNode(StNodeKind.NARRC, null, ts.peek().line, ts.peek().col);
+            constParam.add(parseArrDecl());
+            return constParam;
+        }
+        Token iden = ts.expect(TokenType.TIDEN);
+        if (iden == null) {
+            er.syntax("expected identifier in parameter declaration", ts.peek());
+            ts.syncTo(PARAM_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        if (ts.expect(TokenType.TCOLN) == null) {
+            er.syntax("expected ':' in parameter declaration", ts.peek());
+            ts.syncTo(PARAM_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        // NSIMP
+        Token type = ts.peek();
+        if (type.tokenType == TokenType.TINTG || type.tokenType == TokenType.TREAL || type.tokenType == TokenType.TBOOL) {
+            StNode nsimp = new StNode(StNodeKind.NSIMP, null, ts.peek().line, ts.peek().col);
+            StNode sdecl = new StNode(StNodeKind.NSDECL, null, ts.peek().line, ts.peek().col);
+            ts.consume();
+            sdecl.add(StNode.leaf(StNodeKind.NSIMV, iden));
+            sdecl.add(StNode.leaf(StNodeKind.NSTYPE, type));
+            nsimp.add(sdecl);
+            return nsimp;
+        }
+        // NARRP
+        StNode arrParam = new StNode(StNodeKind.NARRP, null, ts.peek().line, ts.peek().col);
+        arrParam.add(parseArrDecl());
+        return arrParam;
     }
 
     private StNode parseMainBody() {

@@ -80,9 +80,6 @@ public class Parser {
         TokenType.TTEND
     );
 
-
-    
-
     public Parser(TokenStream ts, SymbolTable table, ErrorReporter er) {
         this.ts = ts;
         this.table = table;
@@ -596,15 +593,26 @@ public class Parser {
         StNode stats = new StNode(StNodeKind.NSTATS, null, ts.peek().line, ts.peek().col);
 
         while(startsStat(ts.peek().tokenType)) {
-            stats.add(parseStat());
-            if(ts.expect(TokenType.TSEMI) == null) {
-                er.syntax("expected ';' after statement", ts.previous());
-                ts.syncToEither(STAT_FOLLOW, STAT_START);
-                ts.match(TokenType.TSEMI);
+            StNode s = parseStat();
+            stats.add(s);
+
+            if (requiresSemicolon(s.kind)) {
+                if(ts.expect(TokenType.TSEMI) == null) {
+                    er.syntax("expected ';' after statement", ts.previous());
+                    ts.syncToEither(STAT_FOLLOW, STAT_START);
+                    ts.match(TokenType.TSEMI);
+                }
             }
         }
 
         return stats;
+    }
+
+    private boolean requiresSemicolon(StNodeKind t) {
+        return t != StNodeKind.NFORL
+        && t != StNodeKind.NIFTH
+        && t != StNodeKind.NIFTE
+        && t != StNodeKind.NREPT;
     }
 
     private boolean startsStat(TokenType t) {
@@ -613,7 +621,8 @@ public class Parser {
         || t == TokenType.TRETN // Return
         || t == TokenType.TIDEN // AsgnStat or CallStat
         || t == TokenType.TTFOR
-        || t == TokenType.TIFTH;
+        || t == TokenType.TIFTH
+        || t == TokenType.TREPT;
     }
 
     private StNode parseStat() {
@@ -623,6 +632,7 @@ public class Parser {
         if (t == TokenType.TIDEN) return parseAsgnOrCall();
         if (t == TokenType.TTFOR) return parseForStat();
         if (t == TokenType.TIFTH) return parseIfStat();
+        if (t == TokenType.TREPT) return parseRepeatStat();
 
         er.syntax("invalid statement start", ts.peek());
         return StNode.undefAt(ts.peek());
@@ -636,12 +646,49 @@ public class Parser {
             || n.kind == StNodeKind.NARRV;
     }
 
+    private StNode parseRepeatStat() {
+        Token tRep = ts.expect(TokenType.TREPT);
+
+        if (tRep == null) {
+            er.syntax("expected 'repeat'", ts.peek()); 
+            return StNode.undefAt(ts.peek());
+        }
+
+        if (ts.expect(TokenType.TLPAR) == null) {
+            er.syntax("expected '(' after 'repeat'", ts.peek()); 
+            return StNode.undefAt(ts.peek());
+        }
+
+        StNode init = parseAssignList();
+
+        if (ts.expect(TokenType.TRPAR) == null) {
+            er.syntax("expected ')' after assignment", ts.peek()); 
+            return StNode.undefAt(ts.peek());
+        }
+
+        StNode body = parseStats();
+
+        if (ts.expect(TokenType.TUNTL) == null) {
+            er.syntax("expected 'until' after repeat body", ts.peek()); 
+            return StNode.undefAt(ts.peek());
+        }
+
+        StNode cond = parseBool();
+
+        if (cond == null) {
+            er.syntax("expected condition after until statement", ts.peek()); 
+            return StNode.undefAt(ts.peek());
+        }
+
+        return new StNode(StNodeKind.NREPT, null, tRep.line, tRep.col).add(init).add(body).add(cond);
+    }
+
     // <forstat> ::= for (<asgnlist> ; <bool>) <stats> end 
     private StNode parseForStat() {
         Token tFor = ts.expect(TokenType.TTFOR);
 
         if (tFor == null) {
-            er.syntax("expected 'for' in a 'for' statement dumbass", ts.peek()); 
+            er.syntax("expected 'for'", ts.peek()); 
             return StNode.undefAt(ts.peek());
         }
 

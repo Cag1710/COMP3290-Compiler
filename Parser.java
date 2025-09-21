@@ -49,7 +49,8 @@ public class Parser {
         TokenType.TINPT,  // In
         TokenType.TOUTP,  // Out
         TokenType.TRETN,  // Return
-        TokenType.TIDEN   // Asgn/Call
+        TokenType.TIDEN,   // Asgn/Call
+        TokenType.TTFOR
     );
 
     private static final Set<TokenType> ARRDECL_FOLLOW = Set.of(
@@ -611,7 +612,8 @@ public class Parser {
         return t == TokenType.TINPT // In
         || t == TokenType.TOUTP // Out
         || t == TokenType.TRETN // Return
-        || t == TokenType.TIDEN; // AsgnStat or CallStat
+        || t == TokenType.TIDEN // AsgnStat or CallStat
+        || t == TokenType.TTFOR;
     }
 
     private StNode parseStat() {
@@ -619,6 +621,7 @@ public class Parser {
         if (t == TokenType.TINPT || t == TokenType.TOUTP) return parseIoStat();
         if (t == TokenType.TRETN) return parseReturnStat();
         if (t == TokenType.TIDEN) return parseAsgnOrCall();
+        if (t == TokenType.TTFOR) return parseForStat();
 
         er.syntax("invalid statement start", ts.peek());
         return StNode.undefAt(ts.peek());
@@ -630,6 +633,49 @@ public class Parser {
         return n.kind == StNodeKind.NSIMV 
             || n.kind == StNodeKind.NAELT 
             || n.kind == StNodeKind.NARRV;
+    }
+
+    // <forstat> ::= for (<asgnlist> ; <bool>) <stats> end 
+    private StNode parseForStat() {
+        Token tFor = ts.expect(TokenType.TTFOR);
+
+        if (tFor == null) {
+            er.syntax("expected 'for' in a 'for' statement dumbass", ts.peek()); 
+            return StNode.undefAt(ts.peek());
+        }
+
+        if (ts.expect(TokenType.TLPAR) == null) {
+            er.syntax("expected '(' after 'for'", ts.peek()); 
+            return StNode.undefAt(ts.peek());
+        }
+
+        StNode init = parseAssignList();
+
+        if (ts.expect(TokenType.TSEMI) == null) {
+            er.syntax("expected ';' after for initializer", ts.peek()); 
+            return StNode.undefAt(ts.peek());
+        }
+
+        StNode cond = parseBool();
+
+        if (cond == null) {
+            er.syntax("expected condition in for statement", ts.peek()); 
+            return StNode.undefAt(ts.peek());
+        }
+
+        if (ts.expect(TokenType.TRPAR) == null) {
+            er.syntax("expected ')' after for condition", ts.peek()); 
+            return StNode.undefAt(ts.peek());
+        }
+
+        StNode body = parseStats();
+
+        if (ts.expect(TokenType.TTEND) == null) {
+            er.syntax("expected 'end' after for condition", ts.peek()); 
+            return StNode.undefAt(ts.peek());
+        }
+
+        return new StNode(StNodeKind.NFORL, null, tFor.line, tFor.col).add(init).add(cond).add(body);
     }
 
     /**
@@ -828,9 +874,28 @@ public class Parser {
         return base;
     }
 
+    private StNode parseAssignList() {
+        if (ts.peek().tokenType == TokenType.TIDEN) {
+            return parseAList();
+        }
+
+        return new StNode(StNodeKind.NALIST, null, ts.peek().line, ts.peek().col);
+    }
+
+    private StNode parseAList() {
+        StNode n = new StNode(StNodeKind.NALIST, null, ts.peek().line, ts.peek().col);
+
+        n.add(parseAssignStat());
+        while(ts.match(TokenType.TCOMA)) {
+            n.add(parseAssignStat());
+        }
+
+        return n;
+    }
+
     // <elist> ::= <bool> { , <bool> }
     private StNode parseEList() {
-        StNode n = new StNode(StNodeKind.NEXPL, null, ts.peek().line, ts.peek().col);
+        StNode n = new StNode(StNodeKind.NALIST, null, ts.peek().line, ts.peek().col);
 
         n.add(parseBool());
         while(ts.match(TokenType.TCOMA)) {

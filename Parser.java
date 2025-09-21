@@ -209,6 +209,26 @@ public class Parser {
         return decl;
     }
 
+    private boolean startsSimpleDecl() {
+        return ts.peek().tokenType == TokenType.TIDEN
+        && ts.lookahead(1).tokenType == TokenType.TCOLN;
+    }
+
+    private StNode parseSimpleDeclList() {
+        StNode decls = new StNode(StNodeKind.NSDLST, null, ts.peek().line, ts.peek().col);
+
+        decls.add(parseDecl());
+
+        while(ts.match(TokenType.TCOMA)) {
+            if (!(startsSimpleDecl())) {
+                break;
+            }
+            decls.add(parseDecl());
+        }
+
+        return decls;
+    }
+
     private StNode parseArrayType(Token iden) {
         StNode node = new StNode(StNodeKind.NATYPE, null, ts.peek().line, ts.peek().col);
         // add typeId child
@@ -258,7 +278,11 @@ public class Parser {
         }
         
         // declare list
-        n.add(new StNode(StNodeKind.NSDLST, null, ts.peek().line, ts.peek().col));
+        if (startsSimpleDecl()) {
+            n.add(parseSimpleDeclList());
+        } else {
+            n.add(new StNode(StNodeKind.NSDLST, null, ts.peek().line, ts.peek().col));
+        }
 
         // begin
         if(ts.expect(TokenType.TBEGN) == null) {

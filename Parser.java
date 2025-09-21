@@ -77,6 +77,9 @@ public class Parser {
         TokenType.TMAIN
     );
 
+    private static final Set<TokenType> IF_FOLLOW = Set.of(
+        TokenType.TTEND
+    );
     
 
     public Parser(TokenStream ts, SymbolTable table, ErrorReporter er) {
@@ -547,15 +550,25 @@ public class Parser {
         StNode stats = new StNode(StNodeKind.NSTATS, null, ts.peek().line, ts.peek().col);
 
         while(startsStat(ts.peek().tokenType)) {
-            stats.add(parseStat());
-            if(ts.expect(TokenType.TSEMI) == null) {
-                er.syntax("expected ';' after statement", ts.previous());
-                ts.syncToEither(STAT_FOLLOW, STAT_START);
-                ts.match(TokenType.TSEMI);
+            StNode s = parseStat();
+            stats.add(s);
+
+            if (requiresSemicolon(s.kind)) {
+                if(ts.expect(TokenType.TSEMI) == null) {
+                    er.syntax("expected ';' after statement", ts.previous());
+                    ts.syncToEither(STAT_FOLLOW, STAT_START);
+                    ts.match(TokenType.TSEMI);
+                }
             }
         }
 
         return stats;
+    }
+
+    private boolean requiresSemicolon(StNodeKind t) {
+        return t != StNodeKind.NFORL
+        || t != StNodeKind.NIFTH
+        || t != StNodeKind.NIFTE;
     }
 
     private boolean startsStat(TokenType t) {

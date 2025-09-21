@@ -1,0 +1,58 @@
+/-- example program using CD25's functions 
+CD25 program3
+
+types 
+    Number is 
+        val : integer
+    end
+    ArrayType is array [10] of Number end
+
+arrays
+    arrayToSum : ArrayType,
+    arrayToPrint : ArrayType
+
+/-- simple function to determine if a number is even
+func isEven (x : integer) : boolean
+    /-- no local variables
+begin
+   return x % 2 == 0;
+end
+
+/-- simple function to sum every element in the arr
+func sumArr (arr : ArrayType) : integer
+    sum : integer
+begin
+    for (i = 0; i <= 10)
+        sum += arr[i].x;
+    end
+
+    return sum;
+end
+
+/-- simple function to print every second element of an arr
+func printArr (const arr : ArrayType) : void
+    /-- no local variables
+begin
+    for (i = 0; i <= 10) 
+        if (isEven(i+1))
+            Out << arr[i].val << Line;
+        end
+    end
+end
+
+main
+    x : integer,
+    i : integer,
+    r : integer
+
+begin
+    for (i = 0; i <= 10)
+        arrToSum[i].val = i+1;
+        arrToPrint[i].val = (i+1)*5;
+    end
+
+   r = sumArr(arrToSum);
+   Out << "The array sum is: ", r << Line;
+
+   printArr(arrToPrint);
+end CD25 program3

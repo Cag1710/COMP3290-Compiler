@@ -12,7 +12,7 @@ final class ErrorReporter {
     void syntax(String message, Token at) {
         int line = (at != null ? at.line : -1); // pulls best available position from the token where the error was noticed, fallback -1
         int col = (at != null ? at.col : -1); // same thing with cols
-        CompilerError e = new CompilerError("Syntax", message, line, col); // ties in with existing original lexer error reporter
+        CompilerError e = new CompilerError("Syntax", message, line, col , at); // ties in with existing original lexer error reporter
         errors.add(e); // store error object in list to use later
         out.addError(e); // forward error to controller, shows up in lst file right away
     }

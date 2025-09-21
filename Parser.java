@@ -360,6 +360,11 @@ public class Parser {
             return StNode.undefAt(ts.peek());
         }
         func.add(parseStats());
+        if (ts.expect(TokenType.TTEND) == null) {
+            er.syntax("expected 'end' in function body", ts.peek());
+            ts.syncTo(FUNC_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
         return func;
     }
 
@@ -687,7 +692,7 @@ public class Parser {
             return new StNode(StNodeKind.NRETN, null, r.line, r.col);
         }
 
-        StNode expr = parseExpr();
+        StNode expr = parseBool();
         if(expr == null) {
             er.syntax("expected 'expression' after return statement", ts.peek());
             return new StNode(StNodeKind.NRETN, null, r.line, r.col).add(StNode.undefAt(ts.peek()));

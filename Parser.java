@@ -566,8 +566,8 @@ public class Parser {
         // no else statements attached
         if (ts.match(TokenType.TTEND)) {
             StNode ifNode = new StNode(StNodeKind.NIFTH, null, ts.peek().line, ts.peek().col);
-            ifNode.add(stats);
             ifNode.add(bool);
+            ifNode.add(stats);
             return ifNode;
         }
         // else statements
@@ -583,8 +583,8 @@ public class Parser {
         }
         StNode elseStats = parseStats();
         StNode ifElseNode = new StNode(StNodeKind.NIFTE, null, ts.peek().line, ts.peek().col);
-        ifElseNode.add(stats);
         ifElseNode.add(bool);
+        ifElseNode.add(stats);
         ifElseNode.add(elseStats);
         ts.consume(); // consume end node
 
@@ -613,7 +613,8 @@ public class Parser {
         || t == TokenType.TOUTP // Out
         || t == TokenType.TRETN // Return
         || t == TokenType.TIDEN // AsgnStat or CallStat
-        || t == TokenType.TTFOR;
+        || t == TokenType.TTFOR
+        || t == TokenType.TIFTH;
     }
 
     private StNode parseStat() {
@@ -622,6 +623,7 @@ public class Parser {
         if (t == TokenType.TRETN) return parseReturnStat();
         if (t == TokenType.TIDEN) return parseAsgnOrCall();
         if (t == TokenType.TTFOR) return parseForStat();
+        if (t == TokenType.TIFTH) return parseIfStat();
 
         er.syntax("invalid statement start", ts.peek());
         return StNode.undefAt(ts.peek());

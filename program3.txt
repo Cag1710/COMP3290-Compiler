@@ -15,7 +15,7 @@ arrays
 func isEven (x : integer) : boolean
     /-- no local variables
 begin
-   return x % 2;
+   return x % 2 == 0;
 end
 
 /-- simple function to sum every element in the arr

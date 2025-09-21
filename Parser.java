@@ -360,11 +360,6 @@ public class Parser {
             return StNode.undefAt(ts.peek());
         }
         func.add(parseStats());
-        if (ts.expect(TokenType.TTEND) == null) {
-            er.syntax("expected 'end' in function body", ts.peek());
-            ts.syncTo(FUNC_FOLLOW);
-            return StNode.undefAt(ts.peek());
-        }
         return func;
     }
 
@@ -459,8 +454,14 @@ public class Parser {
             return nsimp;
         }
         // NARRP
+        Token typeIden = ts.expect(TokenType.TIDEN);
+        if (typeIden == null) {
+            er.syntax("expected type identifier in parameter declaration", ts.peek());
+            ts.syncTo(PARAM_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
         StNode arrParam = new StNode(StNodeKind.NARRP, null, ts.peek().line, ts.peek().col);
-        arrParam.add(parseArrDecl());
+        arrParam.add(StNode.leaf(StNodeKind.NSIMV, typeIden));
         return arrParam;
     }
 

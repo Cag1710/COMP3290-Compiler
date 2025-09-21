@@ -1,9 +1,0 @@
-cd25 MissingRHS
-main
-begin
-    x = 1;
-    y +=
-    z[10].field -= 7;   
-    Out << "done" << Line
-end cd25 MissingRHS
-

@@ -1,7 +1,0 @@
-CD25 TestProg
-
-main
-    i : integer
-begin
-    Out << "This string never ends
-end CD25 TestProg

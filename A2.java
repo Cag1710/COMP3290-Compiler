@@ -5,7 +5,7 @@ import java.nio.file.*;
 import java.util.*;
 
 
-public class A1 {
+public class A2 {
     public static void main(String[] args) {
         if(args.length < 1) {
             System.out.println("No file inserted");

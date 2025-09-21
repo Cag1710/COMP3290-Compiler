@@ -33,6 +33,8 @@ public class A1 {
             StNode root = parser.parseProgram();
             oc.commitBuffer();  // outputs the errors found
             TreePrinter.print(root);
+            System.out.println('\n');
+            System.out.println(table);
 
             System.out.println(er.all());
 

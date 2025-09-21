@@ -36,6 +36,8 @@ begin
     for (i = 0; i <= 10) 
         if (isEven(i+1))
             Out << arr[i].val << Line;
+        else
+            i = 6;
         end
     end
 end

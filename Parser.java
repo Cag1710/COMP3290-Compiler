@@ -76,6 +76,11 @@ public class Parser {
         TokenType.TMAIN
     );
 
+    private static final Set<TokenType> IF_FOLLOW = Set.of(
+        TokenType.TTEND
+    );
+
+
     
 
     public Parser(TokenStream ts, SymbolTable table, ErrorReporter er) {
@@ -529,16 +534,61 @@ public class Parser {
         return n;
     }
 
+    private StNode parseIfStat() {
+        if (ts.expect(TokenType.TIFTH) == null) {
+            er.syntax("expected 'if' in an IF statement declaration, fucking dumbass.", ts.peek());
+            ts.syncTo(IF_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        if (ts.expect(TokenType.TLPAR) == null) {
+            er.syntax("expected '(' in if statement declaration", ts.peek());
+            ts.syncTo(IF_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        if (ts.peek().tokenType == TokenType.TRPAR) {
+            er.syntax("expected boolean in if statement declaration", ts.peek());
+            ts.syncTo(IF_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        StNode bool = parseBool();
+        if (ts.expect(TokenType.TRPAR) == null) {
+            er.syntax("expected ')' in if statement declaration", ts.peek());
+            ts.syncTo(IF_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        if (ts.peek().tokenType == TokenType.TTEND) {
+            er.syntax("expected statements following if declaration", ts.peek());
+            ts.syncTo(IF_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        StNode stats = parseStats();
+        // no else statements attached
+        if (ts.match(TokenType.TTEND)) {
+            StNode ifNode = new StNode(StNodeKind.NIFTH, null, ts.peek().line, ts.peek().col);
+            ifNode.add(stats);
+            ifNode.add(bool);
+            return ifNode;
+        }
+        // else statements
+        if (ts.expect(TokenType.TELSE) == null) {
+            er.syntax("expected 'else' following if statements if not end", ts.peek());
+            ts.syncTo(IF_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        if (ts.peek().tokenType == TokenType.TTEND) {
+            er.syntax("expected statements following else declaration", ts.peek());
+            ts.syncTo(IF_FOLLOW);
+            return StNode.undefAt(ts.peek());
+        }
+        StNode elseStats = parseStats();
+        StNode ifElseNode = new StNode(StNodeKind.NIFTE, null, ts.peek().line, ts.peek().col);
+        ifElseNode.add(stats);
+        ifElseNode.add(bool);
+        ifElseNode.add(elseStats);
+        ts.consume(); // consume end node
 
-
-
-
-
-
-
-
-
-
+        return ifElseNode;
+    }
 
     // parsing fuckin everything
     // technically i could probs collapse some of these into one, but this keeps it best in terms of clarity to the pdf

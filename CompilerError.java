@@ -24,6 +24,6 @@ public class CompilerError {
         // if (t == null) {
         //     return String.format("\n%s error: @ line: %d | col: %d\n\t%s\n", type, line, col, message);
         // }
-        return String.format("\n%s error: @ line: %d | col: %d\n\t%s (%s)\n", type, line, col, message, t);
+        return String.format("\n%s error: @ line: %d | col: %d\n\t%s\n", type, line, col, message);
     }
 }

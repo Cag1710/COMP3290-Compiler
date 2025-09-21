@@ -4,6 +4,7 @@ import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 
+
 public class A1 {
     public static void main(String[] args) {
         if(args.length < 1) {
@@ -25,16 +26,15 @@ public class A1 {
                 tokens.add(token);
             } while (token.tokenType != TokenType.T_EOF);
 
-            TokenPrinter.printTokens(tokens, System.out);
             SymbolTable table = new SymbolTable();
             TokenStream ts = new TokenStream(tokens);
             ErrorReporter er = new ErrorReporter(oc);
             Parser parser = new Parser(ts, table, er);
             StNode root = parser.parseProgram();
-            oc.commitBuffer();  // outputs the errors found
-            TreePrinter.print(root);
 
-            System.out.println(er.all());
+            oc.commitBuffer();
+
+            TreePrinter.printReport(root, er, null, System.out);
 
         } catch(IOException e) {
             System.err.println("Error reading file: " + filename);

@@ -157,6 +157,7 @@ public class Parser {
         }
 
         StNode init = new StNode(StNodeKind.NINIT, iden.lexeme, ts.peek().line, ts.peek().col);
+        init.add(StNode.leaf(StNodeKind.NSIMV, iden));
         StNode expr = parseExpr();
         init.add(expr);
         table.add(iden.lexeme, new Symbol(iden.lexeme, "const"));
@@ -222,7 +223,7 @@ public class Parser {
             ts.syncTo(DECL_FOLLOW);
             return StNode.undefAt(ts.peek());
         }
-        decl.add(new StNode(StNodeKind.NSIMV, iden.lexeme, ts.peek().line, ts.peek().col));
+        decl.add(StNode.leaf(StNodeKind.NSIMV, iden));
         if (ts.expect(TokenType.TCOLN) == null) {
             er.syntax("expected ':' in simple declaration", ts.peek());
             ts.syncTo(DECL_FOLLOW);

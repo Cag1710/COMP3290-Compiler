@@ -32,7 +32,6 @@ public class OutputController {
 
     /* Reports an error to be outputted to the listing file. */
     public void addError(CompilerError e) {
-        System.out.println("Reported Error.");
         errors.add(e);
     }
 
@@ -40,7 +39,6 @@ public class OutputController {
     public void commitBuffer() throws IOException {
         addLineNum();
         for (int c : buff) { outputChar(c); }
-        System.out.println("ERRORS SIZE HERE: " + errors.size());
         if (errors.size() > 0) { outputErrors(); }
     }
 

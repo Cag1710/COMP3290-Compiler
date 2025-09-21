@@ -461,6 +461,7 @@ public class Parser {
             return StNode.undefAt(ts.peek());
         }
         StNode arrParam = new StNode(StNodeKind.NARRP, null, ts.peek().line, ts.peek().col);
+        arrParam.add(StNode.leaf(StNodeKind.NSIMV, iden));
         arrParam.add(StNode.leaf(StNodeKind.NSIMV, typeIden));
         return arrParam;
     }

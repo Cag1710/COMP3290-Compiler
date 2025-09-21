@@ -542,7 +542,7 @@ public class Parser {
 
     private StNode parseIfStat() {
         if (ts.expect(TokenType.TIFTH) == null) {
-            er.syntax("expected 'if' in an IF statement declaration, fucking dumbass.", ts.peek());
+            er.syntax("expected 'if' in an IF statement declaration.", ts.peek());
             ts.syncTo(IF_FOLLOW);
             return StNode.undefAt(ts.peek());
         }

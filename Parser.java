@@ -81,12 +81,6 @@ public class Parser {
         TokenType.TTEND
     );
 
-
-    private static final Set<TokenType> IF_FOLLOW = Set.of(
-        TokenType.TTEND
-    );
-    
-
     public Parser(TokenStream ts, SymbolTable table, ErrorReporter er) {
         this.ts = ts;
         this.table = table;
@@ -617,8 +611,8 @@ public class Parser {
 
     private boolean requiresSemicolon(StNodeKind t) {
         return t != StNodeKind.NFORL
-        || t != StNodeKind.NIFTH
-        || t != StNodeKind.NIFTE;
+        && t != StNodeKind.NIFTH
+        && t != StNodeKind.NIFTE;
     }
 
     private boolean startsStat(TokenType t) {

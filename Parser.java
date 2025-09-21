@@ -102,6 +102,7 @@ public class Parser {
             er.syntax("expected program identifier after 'cd25'", ts.peek());
             prog.add(StNode.undefAt(ts.peek()));
         } else {
+            table.add(progId.lexeme, new Symbol(progId.lexeme, "cd25"));
             prog.add(StNode.leaf(StNodeKind.NSIMV, progId));
         }
 
@@ -158,7 +159,7 @@ public class Parser {
         StNode init = new StNode(StNodeKind.NINIT, iden.lexeme, ts.peek().line, ts.peek().col);
         StNode expr = parseExpr();
         init.add(expr);
-
+        table.add(iden.lexeme, new Symbol(iden.lexeme, "const"));
         return init;
     }
 
@@ -197,6 +198,7 @@ public class Parser {
         // type is a struct
         StNode structType =  new StNode(StNodeKind.NRTYPE, null, ts.peek().line, ts.peek().col);
         structType.add(new StNode(StNodeKind.NSIMV, iden.lexeme, ts.peek().line, ts.peek().col));
+        table.add(iden.lexeme, new Symbol(iden.lexeme, "struct"));
         structType.add(parseFields());
         return structType;
     }
@@ -236,6 +238,7 @@ public class Parser {
             ts.syncTo(DECL_FOLLOW);
             return StNode.undefAt(ts.peek());
         }
+        table.add(iden.lexeme, new Symbol(iden.lexeme, stype.lexeme));
         return decl;
     }
 
@@ -287,6 +290,7 @@ public class Parser {
             return StNode.undefAt(ts.peek());
         }
         node.add(new StNode(StNodeKind.NSIMV, structId.lexeme, ts.peek().line, ts.peek().col));
+        table.add(iden.lexeme, new Symbol(iden.lexeme, structId.lexeme));
         return node;
     }
     
@@ -322,6 +326,7 @@ public class Parser {
             return StNode.undefAt(ts.peek());
         }
         decl.add(StNode.leaf(StNodeKind.NSIMV, iden));
+        table.add(iden.lexeme, new Symbol(iden.lexeme, "array"));
         return decl;
     }
 
@@ -382,6 +387,7 @@ public class Parser {
             return StNode.undefAt(ts.peek());
         }
         func.add(parseStats());
+        table.add(iden.lexeme, new Symbol(iden.lexeme, "function"));
         return func;
     }
 
@@ -416,6 +422,7 @@ public class Parser {
             StNode decl = new StNode(StNodeKind.NSDECL, null, ts.peek().line, ts.peek().col);
             decl.add(StNode.leaf(StNodeKind.NSIMV, iden));
             decl.add(StNode.leaf(StNodeKind.NSTYPE, type));
+            table.add(iden.lexeme, new Symbol(iden.lexeme, type.lexeme));
             ts.consume();
             return decl;
         }
@@ -473,6 +480,7 @@ public class Parser {
             sdecl.add(StNode.leaf(StNodeKind.NSIMV, iden));
             sdecl.add(StNode.leaf(StNodeKind.NSTYPE, type));
             nsimp.add(sdecl);
+            table.add(iden.lexeme, new Symbol(iden.lexeme, type.lexeme));
             return nsimp;
         }
         // NARRP
@@ -485,6 +493,7 @@ public class Parser {
         StNode arrParam = new StNode(StNodeKind.NARRP, null, ts.peek().line, ts.peek().col);
         arrParam.add(StNode.leaf(StNodeKind.NSIMV, iden));
         arrParam.add(StNode.leaf(StNodeKind.NSIMV, typeIden));
+        table.add(iden.lexeme, new Symbol(iden.lexeme, typeIden.lexeme));
         return arrParam;
     }
 

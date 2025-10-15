@@ -26,4 +26,16 @@ final class ErrorReporter {
     boolean hasErrors() {
         return !errors.isEmpty();
     }
+
+    void semantic(String message, Token t) {
+        int line = (t != null ? t.line : -1);
+        int col = (t != null ? t.col : -1);
+        CompilerError e = new CompilerError("Semantic", message, line, col, t);
+        errors.add(e);
+        out.addError(e);
+    }
+
+    int count() {
+        return errors.size();
+    }
 }

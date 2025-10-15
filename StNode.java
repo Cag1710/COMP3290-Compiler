@@ -52,6 +52,8 @@ public final class StNode {
     public final String lexeme; // identifier
     public final int line, col; // position
     private final List<StNode> kids = new ArrayList<>(); // holds the ordered children (left-to-right)
+    private Type inferredType;
+    private Symbol boundSymbol;
 
     public StNode(StNodeKind kind, String lexeme, int line, int col) {
         this.kind = Objects.requireNonNull(kind);
@@ -96,6 +98,22 @@ public final class StNode {
         return new StNode(StNodeKind.NUNDEF, null, 
                             (t != null ? t.line : -1), 
                             (t != null ? t.col : -1));
+    }
+
+    public void setType(Type t) {
+        this.inferredType = t;
+    }
+
+    public Type getType() {
+        return inferredType;
+    }
+
+    public void setSymbol(Symbol s) {
+        this.boundSymbol = s;
+    }
+
+    public Symbol getSymbol() {
+        return boundSymbol;
     }
 
     @Override

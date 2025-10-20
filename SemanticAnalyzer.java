@@ -37,6 +37,8 @@ public final class SemanticAnalyzer {
         table.exit();
     }
 
+    /******** Helpers *********/
+
     // convert source type name into an actual type value so NSTYPE holding "integer" returns new Type.Int();
     private Type baseTypeFromLexeme(String lx) {
         if (lx == null) return null;
@@ -52,6 +54,19 @@ public final class SemanticAnalyzer {
                 }
                 return null;
         }
+    }
+
+    // check the type and return a printable string from it
+    private String printable(Type t) {
+        if (t == null) return "<?>"; 
+        if (t instanceof Type.Int) return "integer";
+        if (t instanceof Type.Real) return "real";
+        if (t instanceof Type.Bool) return "boolean";
+        if (t instanceof Type.VoidT) return "void";
+        if (t instanceof Type.Error) return "<error>";
+        if (t instanceof Type.Array a) return "array[" + a.size() + "] of " + printable(a.elem());
+        if (t instanceof Type.Struct) return "struct";
+        return t.toString();
     }
 
     // returns the first direct child of node n of a certain node kind
@@ -122,6 +137,46 @@ public final class SemanticAnalyzer {
         if (!table.define(s)) {
             er.semantic("Semantic: duplicate identifier in this scope: '" + s.name() + "'", null);
         }
+    }
+
+    // ensure the left hand value is actually a variable that can handle assignment - id, arr[index], arr[index].field
+    private void ensureLValue(StNode n) {
+        boolean ok = n.kind == StNodeKind.NSIMV || n.kind == StNodeKind.NAELT || n.kind == StNodeKind.NARRV;
+        if (!ok) er.semantic("Semantic: left side of assignment must be a variable", null);
+    }
+
+    // if either type is real, result is real, otherwise its in an int
+    private Type numericResult (Type a, Type b) {
+        if (a instanceof Type.Error || b instanceof Type.Error) return new Type.Error();
+        if (Type.isNumeric(a) && Type.isNumeric(b)) {
+            return (a instanceof Type.Real || b instanceof Type.Real) ? new Type.Real() : new Type.Int();
+        }
+        return null;
+    }
+
+    // takes in a node and returns its type
+    // used to check when only specific types are allowed e.g. in assignment, check the lhs and rhs types, if they cant be assigned to eachother, its an error, this will be expanded as we go along
+    private Type typeOf(StNode n) {
+        if (n == null) return null;
+        if (n.getType() != null) return n.getType();
+
+        Type t;
+        switch (n.kind) {
+            // literals
+            case NILIT -> t = new Type.Int();
+            case NFLIT -> t = new Type.Real();
+            case NTRUE, NFALS -> t = new Type.Bool();
+
+            // variables
+            case NSIMV -> t = typeOfId(n.lexeme, n);
+            case NAELT -> t = typeOfArrayIndex(n);
+            case NARRV -> t = typeOfArrayElem(n);
+
+            default -> t = new Type.Error();
+        }
+
+        n.setType(t);
+        return t;
     }
 
     // check name and footer match
@@ -229,5 +284,71 @@ public final class SemanticAnalyzer {
      */
     private void visitMain(StNode nmain) {
 
+    }
+
+    // resolve an NSIMV node to a declaration and return its type
+    private Type typeOfId(String name, StNode at) {
+        Symbol s = table.resolve(name); // check the symbol is actually declared in a scope somewhere
+
+        if (s == null) {
+            er.semantic("Semantic: identifier used before declaration: " + name, null);
+            return new Type.Error();
+        }
+
+        at.setSymbol(s); // bind this declaration to the node
+        return s.type(); // return the symbols type
+    }
+
+    // handles base[index]
+    private Type typeOfArrayIndex(StNode n) {
+        StNode base = n.children().get(0); // get the base
+        StNode index = n.children().get(1); // get the indexd
+
+        // get their types
+        Type bt = typeOf(base);
+        Type it = typeOf(index);
+
+        // if base type is not an array, error
+        if (!(bt instanceof Type.Array a)) { // pattern matching - instanceof checks if object is specific type, if true creates a new variable and assigns the object to it
+            er.semantic("Semantic: indexed expression is not an array: " + base.lexeme, null);
+            return new Type.Error();
+        }
+
+        // if index type is not an int, error
+        if (!(it instanceof Type.Int)) {
+            er.semantic("Semantic: array index must be an integer", null);
+            return new Type.Error();
+        }
+
+        // the type of base[index] is the arrays element type
+        return a.elem();
+    }
+
+    // handles base[index].field
+    private Type typeOfArrayElem(StNode n) {
+        StNode base = n.children().get(0); // base
+        StNode index = n.children().get(1); // index
+        StNode field = n.children().get(2); // field
+
+        // ensure base[index] is valid and yields a struct element type
+        Type elem = typeOfArrayIndex(new StNode(StNodeKind.NAELT, null, n.line, n.col).add(base).add(index));
+
+        // ensure the element is a struct
+        if (!(elem instanceof Type.Struct s)) {
+            er.semantic("Semantic: array element is not a struct, cannot select field '" + field.lexeme + "'" , null);
+            return new Type.Error();
+        }
+        
+        // look up the field type in the structs field map - Map<String, Type> fields
+        Type ft = s.fields().get(field.lexeme);
+
+        // unknown field, error
+        if (ft == null) {
+            er.semantic("Semantic: unknown field '" + field.lexeme + "' in struct", null);
+            return new Type.Error();
+        }
+
+        // return the field type
+        return ft;
     }
 }

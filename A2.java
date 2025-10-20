@@ -4,6 +4,8 @@ import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 
+import javax.sound.midi.SysexMessage;
+
 
 public class A2 {
     public static void main(String[] args) {
@@ -31,10 +33,13 @@ public class A2 {
             ErrorReporter er = new ErrorReporter(oc);
             Parser parser = new Parser(ts, table, er);
             StNode root = parser.parseProgram();
+            SemanticAnalyzer sa = new SemanticAnalyzer(table, er);
+            sa.analyze(root);
 
             oc.commitBuffer();
 
             TreePrinter.printReport(root, er, null, System.out);
+            
 
         } catch(IOException e) {
             System.err.println("Error reading file: " + filename);

@@ -3,7 +3,7 @@ CD25 program1
 constants
     t is 14,
     s is true,
-    is 8
+    d is 8
 main
     x : integer,
     y : integer,

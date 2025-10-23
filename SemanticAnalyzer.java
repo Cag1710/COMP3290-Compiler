@@ -627,13 +627,13 @@ public final class SemanticAnalyzer {
 
         if (cond != null) {
             Type ct = typeOf(cond);
-            if(!(ct instanceof Type.Error()) && !(ct instanceof Type.Bool)) {
+            if(!(ct instanceof Type.Error) && !(ct instanceof Type.Bool)) {
                 Token pos = new Token(TokenType.TOUTP, null, cond.line, cond.col);
                 er.semantic("Semantic: for-loop condition must be boolean, got " + printable(ct),  pos);
             }
         }
 
-        if (body != null && body.kind == StNodeKind.NALIST) {
+        if (body != null && body.kind == StNodeKind.NSTATS) {
             for (StNode s : body.children()) {
                 visitStat(s);
             }
@@ -641,10 +641,62 @@ public final class SemanticAnalyzer {
     }
 
     private void visitRept(StNode n) {
+        if (n == null || n.children().size() < 3) return;
 
+        StNode a = n.children().get(0);
+        StNode body = n.children().get(1);
+        StNode cond = n.children().get(2);
+
+        if (a != null && a.kind == StNodeKind.NALIST) {
+            for (StNode assign : a.children()) {
+                switch (assign.kind) {
+                    case NASGN, NPLEQ, NMNEQ, NSTEA, NDVEQ -> visitAssign(assign);
+                    default -> typeOf(assign);
+                }
+            }
+        }
+
+        if (body != null && body.kind == StNodeKind.NSTATS) {
+            for (StNode s : body.children()) {
+                visitStat(s);
+            }
+        }
+
+        if (cond != null) {
+            Type ct = typeOf(cond);
+            if (!(ct instanceof Type.Error) && !(ct instanceof Type.Bool)) {
+                Token pos = new Token(TokenType.TOUTP, null, cond.line, cond.col);
+                er.semantic("Semantic: Repeat-until condition must be boolean, got " + printable(ct),  pos);
+            }
+        }
     }
 
     private void visitIf(StNode n) {
+        if (n == null || n.children().size() < 2) return;
 
+        StNode cond = n.children().get(0);
+        if (cond != null) {
+            Type ct = typeOf(cond);
+            if (!(ct instanceof Type.Error) && !(ct instanceof Type.Bool)) {
+                Token pos = new Token(TokenType.TOUTP, null, cond.line, cond.col);
+                er.semantic("Semantic: If condition must be boolean, got " + printable(ct),  pos);
+            }
+        }
+
+        StNode body = n.children().get(1);
+        if (body != null && body.kind == StNodeKind.NSTATS) {
+            for (StNode s : body.children()) {
+                visitStat(s);
+            }
+        }
+
+        if (n.kind == StNodeKind.NIFTE && n.children().size() > 2) {
+            StNode elseStats = n.children().get(2);
+            if (elseStats != null && elseStats.kind == StNodeKind.NSTATS) {
+                for (StNode s : elseStats.children()) {
+                    visitStat(s);
+                }
+            }
+        }
     }
 }

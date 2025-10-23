@@ -39,6 +39,7 @@ public class A2 {
             oc.commitBuffer();
 
             TreePrinter.printReport(root, er, null, System.out);
+            TreePrinter.print(root);
             
 
         } catch(IOException e) {

@@ -406,6 +406,24 @@ public final class SemanticAnalyzer {
     private Type typeOfArith(StNode n) {
         Type a = typeOf(n.children().get(0));
         Type b = typeOf(n.children().get(1));
+
+        if (a instanceof Type.Error || b instanceof Type.Error) return new Type.Error();
+        
+        if (n.kind == StNodeKind.NPOW) {
+        
+            if (!Type.isNumeric(a)) {
+                er.semantic("Semantic: left operand of '^' must be numeric, got " + printable(a), null);
+                return new Type.Error();
+            }
+        
+            if (!(b instanceof Type.Int)) {
+                er.semantic("Semantic: right operand of '^' must be integer, got " + printable(b), null);
+                return new Type.Error();
+            }
+        
+            return (a instanceof Type.Real) ? new Type.Real() : new Type.Int();
+        }
+
         Type r = numericResult(a, b);
 
         if (r == null) {
@@ -417,6 +435,7 @@ public final class SemanticAnalyzer {
             er.semantic("Semantic: operator '%' requires integer operands", null);
             return new Type.Error();
         }
+
         return r;
     }
 

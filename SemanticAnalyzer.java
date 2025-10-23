@@ -437,7 +437,7 @@ public final class SemanticAnalyzer {
             }
 
             case NEQL, NNEQ -> {
-                boolean bothNumeric = Type.isNumeric(a) && Type.isBool(b);
+                boolean bothNumeric = Type.isNumeric(a) && Type.isNumeric(b);
                 boolean bothBool = Type.isBool(a) && Type.isBool(b);
                 if (bothNumeric || bothBool) {
                     return new Type.Bool();
@@ -627,7 +627,7 @@ public final class SemanticAnalyzer {
 
         if (cond != null) {
             Type ct = typeOf(cond);
-            if(!(ct instanceof Type.Error()) && !(ct instanceof Type.Bool)) {
+            if (!(ct instanceof Type.Error) && !(ct instanceof Type.Bool)) {
                 Token pos = new Token(TokenType.TOUTP, null, cond.line, cond.col);
                 er.semantic("Semantic: for-loop condition must be boolean, got " + printable(ct),  pos);
             }

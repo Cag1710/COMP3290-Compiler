@@ -456,7 +456,7 @@ public final class SemanticAnalyzer {
             }
 
             case NEQL, NNEQ -> {
-                boolean bothNumeric = Type.isNumeric(a) && Type.isBool(b);
+                boolean bothNumeric = Type.isNumeric(a) && Type.isNumeric(b);
                 boolean bothBool = Type.isBool(a) && Type.isBool(b);
                 if (bothNumeric || bothBool) {
                     return new Type.Bool();

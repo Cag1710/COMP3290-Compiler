@@ -304,7 +304,7 @@ public final class SemanticAnalyzer {
         StNode stats = firstChild(nmain, StNodeKind.NSTATS);
         if (stats != null) {
             for (StNode s : stats.children()) {
-                vistStat(s);
+                visitStat(s);
             }
         }
 
@@ -317,8 +317,20 @@ public final class SemanticAnalyzer {
     }
 
     // statement dispatcher
-    private void vistStat(StNode s) {
+    private void visitStat(StNode s) {
 
+        switch (s.kind) {
+            case NASGN, NPLEQ, NMNEQ, NSTEA, NDVEQ -> visitAssign(s);
+            case NINPUT, NOUTP, NOUTL -> visitIO(s);
+            case NCALL -> {}
+            case NFORL, NREPT, NIFTH, NIFTE -> visitControls(s);
+
+            case NRETN -> {
+
+            }
+
+            default -> {}
+        }
     }
 
     // Variables
@@ -578,5 +590,61 @@ public final class SemanticAnalyzer {
 
             default -> {}
         }
+    }
+
+    private void visitControls(StNode n) {
+
+        switch (n.kind) {
+            case NFORL -> visitFor(n);
+
+            case NREPT -> visitRept(n);
+            case NIFTH -> visitIf(n);
+            case NIFTE -> visitIf(n);
+
+            default -> {}
+        }
+    }
+
+    private void visitFor(StNode n) {
+        if (n == null || n.children().isEmpty()) return;
+
+        StNode trio = n.children().get(0);
+        StNode body = (n.children().size() > 1) ? n.children().get(1) : null;
+
+        StNode init = null, cond = null;
+        if (trio != null && trio.kind == StNodeKind.NALIST) {
+            List<StNode> t = trio.children();
+            if (t.size() > 0 ) init = t.get(0);
+            if (t.size() > 1 ) cond = t.get(1);
+        }
+
+        if (init != null) {
+            switch (init.kind) {
+                case NASGN, NPLEQ, NMNEQ, NSTEA, NDVEQ -> visitAssign(init);
+                default -> typeOf(init);
+            }
+        }
+
+        if (cond != null) {
+            Type ct = typeOf(cond);
+            if(!(ct instanceof Type.Error()) && !(ct instanceof Type.Bool)) {
+                Token pos = new Token(TokenType.TOUTP, null, cond.line, cond.col);
+                er.semantic("Semantic: for-loop condition must be boolean, got " + printable(ct),  pos);
+            }
+        }
+
+        if (body != null && body.kind == StNodeKind.NALIST) {
+            for (StNode s : body.children()) {
+                visitStat(s);
+            }
+        }
+    }
+
+    private void visitRept(StNode n) {
+
+    }
+
+    private void visitIf(StNode n) {
+
     }
 }

@@ -172,6 +172,14 @@ public final class SemanticAnalyzer {
             case NAELT -> t = typeOfArrayIndex(n);
             case NARRV -> t = typeOfArrayElem(n);
 
+            // arithemetic
+            case NADD, NSUB, NMUL, NDIV, NMOD, NPOW -> t = typeOfArith(n);
+
+            // relation/bool
+            case NEQL, NNEQ, NGRT, NLSS, NGEQ, NLEQ -> t = typeOfRel(n);
+            case NNOT -> t = typeOfNot(n);
+            case NAND, NOR, NXOR -> t = typeOfBoolBin(n);
+
             default -> t = new Type.Error();
         }
 
@@ -283,9 +291,37 @@ public final class SemanticAnalyzer {
      * 
      */
     private void visitMain(StNode nmain) {
+        table.enter();
+
+        StNode dlist = firstChild(nmain, StNodeKind.NSDLST);
+
+        if (dlist != null) {
+            for (StNode d : dlist.children()) {
+                declareLocal(d);
+            }
+        }
+
+        StNode stats = firstChild(nmain, StNodeKind.NSTATS);
+        if (stats != null) {
+            for (StNode s : stats.children()) {
+                vistStat(s);
+            }
+        }
+
+        table.exit();
+    }
+
+    // declare locals
+    private void declareLocal(StNode d) {
 
     }
 
+    // statement dispatcher
+    private void vistStat(StNode s) {
+
+    }
+
+    // Variables
     // resolve an NSIMV node to a declaration and return its type
     private Type typeOfId(String name, StNode at) {
         Symbol s = table.resolve(name); // check the symbol is actually declared in a scope somewhere
@@ -299,6 +335,7 @@ public final class SemanticAnalyzer {
         return s.type(); // return the symbols type
     }
 
+    // Arrays
     // handles base[index]
     private Type typeOfArrayIndex(StNode n) {
         StNode base = n.children().get(0); // get the base
@@ -324,6 +361,7 @@ public final class SemanticAnalyzer {
         return a.elem();
     }
 
+    // Fields
     // handles base[index].field
     private Type typeOfArrayElem(StNode n) {
         StNode base = n.children().get(0); // base
@@ -350,5 +388,195 @@ public final class SemanticAnalyzer {
 
         // return the field type
         return ft;
+    }
+
+    // Arithmetic
+    private Type typeOfArith(StNode n) {
+        Type a = typeOf(n.children().get(0));
+        Type b = typeOf(n.children().get(1));
+        Type r = numericResult(a, b);
+
+        if (r == null) {
+            er.semantic("Semantic: arithmetic operands must be numeric, got " + printable(a) + " and " + printable(b), null);
+            return new Type.Error();
+        }
+
+        if (n.kind == StNodeKind.NMOD && !(a instanceof Type.Int && b instanceof Type.Int)) {
+            er.semantic("Semantic: operator '%' requires integer operands", null);
+            return new Type.Error();
+        }
+        return r;
+    }
+
+    // Relations
+    private Type typeOfRel(StNode n) {
+        Type a = typeOf(n.children().get(0));
+        Type b = typeOf(n.children().get(1));
+
+        if (a instanceof Type.Error || b instanceof Type.Error) return new Type.Error();
+
+        switch (n.kind) {
+            case NGRT, NLSS, NGEQ, NLEQ -> {
+                if (Type.isNumeric(a) && Type.isNumeric(b)) {
+                    return new Type.Bool();
+                }
+                er.semantic("Semantic: relational operator requires numeric operands, got " + printable(a) + " and " + printable(b) , null);
+                return new Type.Error();
+            }
+
+            case NEQL, NNEQ -> {
+                boolean bothNumeric = Type.isNumeric(a) && Type.isBool(b);
+                boolean bothBool = Type.isBool(a) && Type.isBool(b);
+                if (bothNumeric || bothBool) {
+                    return new Type.Bool();
+                }
+                er.semantic("Semantic: '=='/'!=' require both numeric or both boolean got " + printable(a) + " and " + printable(b), null);
+                return new Type.Error();
+            }
+
+            default -> {
+                er.semantic("Semantic: internal error: typeOfRel called on " + n.kind, null);
+                return new Type.Error();
+            }
+        }
+    }
+
+    private Type typeOfNot(StNode n) {
+        Type t = typeOf(n.children().get(0));
+
+        if (!(t instanceof Type.Bool)) {
+            er.semantic("Semantic: 'not' requires boolean operand, got " + printable(t), null);
+            return new Type.Error();
+        }
+
+        return new Type.Bool();
+    }
+
+    private Type typeOfBoolBin(StNode n) {
+        Type a = typeOf(n.children().get(0));
+        Type b = typeOf(n.children().get(1));
+
+        if (!(a instanceof Type.Bool && b instanceof Type.Bool)) {
+            er.semantic("Semantic: boolean operator requries boolean operands, got " + printable(a) + " and " + printable(b), null);
+            return new Type.Error();
+        }
+
+        return new Type.Bool();
+    }
+
+    // Assignments
+    private void visitAssign(StNode asgn) {
+        List<StNode> k = asgn.children();
+
+        if (k.size() < 2) return;
+
+        StNode left = k.get(0);
+        StNode right = k.get(1);
+
+        ensureLValue(left);
+        Type lt = typeOf(left);
+
+        if (lt instanceof Type.Error) return; 
+
+        Type rt;
+
+        switch (asgn.kind) {
+
+            case NASGN -> {
+                rt = typeOf(right);
+            }
+
+            case NPLEQ -> {
+                rt = typeOf(new StNode(StNodeKind.NADD, null, asgn.line, asgn.col).add(left).add(right));
+            }
+
+            case NMNEQ -> {
+                rt = typeOf(new StNode(StNodeKind.NSUB, null, asgn.line, asgn.col).add(left).add(right));
+            }
+
+            case NSTEA -> {
+                rt = typeOf(new StNode(StNodeKind.NMUL, null, asgn.line, asgn.col).add(left).add(right));
+            }
+
+            case NDVEQ -> {
+                rt = typeOf(new StNode(StNodeKind.NDIV, null, asgn.line, asgn.col).add(left).add(right));
+            }
+
+            default -> {
+                return;
+            }
+        }
+
+        if (rt instanceof Type.Error) return; 
+
+        if (!assignable(lt, rt)) {
+            Token pos = new Token(TokenType.TIDEN, left.lexeme, left.line, left.col);
+            er.semantic("Semantic: cannot assign " + printable(rt) + " to " + printable(lt), pos);
+        }
+
+    }
+
+    private boolean assignable(Type target, Type src) {
+        if (target instanceof Type.Error || src instanceof Type.Error) return true;
+        if (target == null || src == null) return false;
+        if (target.getClass() == src.getClass()) return true;
+        if (target instanceof Type.Real && src instanceof Type.Int) return true;
+        if (target instanceof Type.Array ta && src instanceof Type.Array sa) {
+            return assignable(ta.elem(), sa.elem()) && ta.size() == sa.size();
+        }
+        return false;
+    }
+
+    // I/O
+    private void visitIO(StNode io) {
+        switch (io.kind) {
+            case NINPUT -> {
+                if (io.children().isEmpty()) return;
+                StNode vlist = io.children().get(0);
+                for (StNode v : vlist.children()) {
+                    ensureLValue(v);
+
+                    Type t = typeOf(v);
+                    if (t instanceof Type.Error) continue;
+
+                    if (t instanceof Type.Array || t instanceof Type.Struct || t instanceof Type.VoidT) {
+                        Token pos = new Token(TokenType.TIDEN, v.lexeme, v.line, v.col);
+                        er.semantic("Semantic: cannot read into " + printable(t), pos);
+                    }
+                }
+            }
+
+            case NOUTP -> {
+                if (io.children().isEmpty()) return;
+                StNode prlist = io.children().get(0);
+                for (StNode pr : prlist.children()) {
+                    if (pr.kind == StNodeKind.NSTRG) continue;
+                    Type t = typeOf(pr);
+
+                    if (t instanceof Type.Error) continue;
+                    if (t instanceof Type.VoidT) {
+                        Token pos = new Token(TokenType.TOUTP, null, pr.line, pr.col);
+                        er.semantic("Semantic: cannot print value of type void", pos);
+                    }
+                }
+            }
+
+            case NOUTL -> {
+                if (io.children().isEmpty()) return;
+                StNode prlist = io.children().get(0);
+                for (StNode pr : prlist.children()) {
+                    if (pr.kind == StNodeKind.NSTRG) continue;
+                    Type t = typeOf(pr);
+                    
+                    if (t instanceof Type.Error) continue;
+                    if (t instanceof Type.VoidT) {
+                        Token pos = new Token(TokenType.TOUTP, null, pr.line, pr.col);
+                        er.semantic("Semantic: cannot print value of type void", pos);
+                    }
+                }
+            }
+
+            default -> {}
+        }
     }
 }

@@ -3,6 +3,8 @@ import java.util.*;
 public final class SemanticAnalyzer {
     private final SymbolTable table;
     private final ErrorReporter er;
+    private Type currentFuncReturnType = null;
+    private boolean sawReturnInCurrentFunc = false;
 
     public SemanticAnalyzer(SymbolTable table, ErrorReporter er) {
         this.table = table;
@@ -329,7 +331,47 @@ public final class SemanticAnalyzer {
      * exit the scope
      */
     private void checkFuncBodies(StNode nfuncs) {
+        if (nfuncs == null || nfuncs.kind != StNodeKind.NFUNCS) return;
 
+        for (StNode f : nfuncs.children()) {
+            if (f.kind == StNodeKind.NFUND) {
+                checkFuncBody(f);
+            }
+        }
+    }
+
+    private void checkFuncBody(StNode fund) {
+        Type prevRet = currentFuncReturnType;
+        currentFuncReturnType = typeFromNode(firstChild(fund, StNodeKind.NSTYPE));
+        boolean prevSaw = sawReturnInCurrentFunc;
+        sawReturnInCurrentFunc = false;
+
+        table.enter();
+
+        StNode plist = firstChild(fund, StNodeKind.NPLIST);
+        if (plist != null) defineParams(plist);
+        StNode dlist = firstChild(fund, StNodeKind.NDLIST);
+        if (dlist != null) {
+            for (StNode d : dlist.children()) {
+                declareLocal(d);
+            }
+        }
+
+        StNode stats = firstChild(fund, StNodeKind.NSTATS);
+        if (stats != null) {
+            for (StNode s : stats.children()) {
+                visitStat(s);
+            }
+        }
+
+        table.exit();
+
+        if (!(currentFuncReturnType instanceof Type.VoidT) && !sawReturnInCurrentFunc) {
+            er.semantic("Semantic: function '" + firstName(fund) + "' may not return a value on all paths", tokenAt(fund, TokenType.TVOID));
+        }
+
+        currentFuncReturnType = prevRet;
+        sawReturnInCurrentFunc = prevSaw;
     }
 
     /**
@@ -372,6 +414,10 @@ public final class SemanticAnalyzer {
         }
     }
 
+    private void defineParams(StNode plist) {
+        
+    }
+
     private void defineSimpleDecl(StNode nsdecl) {
         String name = firstName(nsdecl);
 
@@ -398,9 +444,7 @@ public final class SemanticAnalyzer {
             case NCALL -> {}
             case NFORL, NREPT, NIFTH, NIFTE -> visitControls(s);
 
-            case NRETN -> {
-
-            }
+            case NRETN -> visitReturn(s);
 
             default -> {}
         }
@@ -614,7 +658,6 @@ public final class SemanticAnalyzer {
         if (rt instanceof Type.Error) return; 
 
         if (!assignable(lt, rt)) {
-            Token pos = new Token(TokenType.TIDEN, left.lexeme, left.line, left.col);
             er.semantic("Semantic: cannot assign " + printable(rt) + " to " + printable(lt), tokenAtOp(asgn));
         }
 
@@ -784,5 +827,33 @@ public final class SemanticAnalyzer {
                 }
             }
         }
+    }
+
+    private void visitReturn(StNode n) {
+
+        boolean hasExpr = !n.children().isEmpty();
+        Type exprType = null;
+
+        if (hasExpr) {
+            exprType = typeOf(n.children().get(0));
+        }
+
+        if (currentFuncReturnType == null) {
+            return;
+        }
+
+        if (currentFuncReturnType instanceof Type.VoidT) {
+            if (hasExpr) {
+                er.semantic("Semantic: 'return' in a void function must not return a value", tokenAt(n, TokenType.TRETN));
+            }
+        } else {
+            if (!hasExpr) {
+                er.semantic("Semantic: missing return value", tokenAt(n, TokenType.TRETN));
+            } else if (!(exprType instanceof Type.Error) && !assignable(currentFuncReturnType, exprType)) {
+                er.semantic("Semantic: cannot return " + printable(exprType) + " from function returning " + printable(currentFuncReturnType), tokenAt(n, TokenType.TRETN));
+            }
+        }
+
+        sawReturnInCurrentFunc = true;
     }
 }

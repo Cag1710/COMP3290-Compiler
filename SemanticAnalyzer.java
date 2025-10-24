@@ -281,6 +281,47 @@ public final class SemanticAnalyzer {
 
     // array declarations, const initializers etc.
     private void visitGlobals(StNode nglob) {
+        StNode consts = firstChild(nglob, StNodeKind.NILIST);
+        StNode structs = firstChild(nglob, StNodeKind.NTYPEL);
+        StNode arrs = firstChild(nglob, StNodeKind.NALIST);
+
+        if (consts != null) { declareConsts(consts); }
+        if (structs != null) { declareStructs(structs); }
+        if (consts != null) { declareArrays(arrs); }
+    }
+
+    private void declareConsts(StNode consts) {
+        for (StNode c: consts.children()) {
+            if (c.kind != StNodeKind.NINIT) continue;
+
+            String cname = firstName(c);
+            if (cname == null) {
+                er.semantic("Semantic: constant missing identifier", tokenAt(c, TokenType.TCNST));
+                continue;
+            }
+            
+            // get just the <expr> of the init
+            StNode expr = c.children().get(1);
+            Type cType = typeOf(expr);
+            Object cVal = evalExpr(expr);
+
+            ConstSymbol cSym = new ConstSymbol(cname, cType, cVal);
+            defineOrDup(cSym, c);
+        }
+    }
+
+    private Object evalExpr(StNode expr) {
+        // TODO: implement expr evaluation for constant decl
+
+        return null;
+    }
+    
+    // this refers to the <types> section changed to structs to save confusion with our Type class
+    private void declareStructs(StNode structs) {
+
+    }
+
+    private void declareArrays(StNode arrs) {
 
     }
 

@@ -55,6 +55,46 @@ public final class SemanticAnalyzer {
                 return null;
         }
     }
+    // for error reporting, mostly just in stats
+    private TokenType tokenTypeForOp(StNodeKind k) {
+        return switch (k) {
+            // --- Arithmetic ---
+            case NADD -> TokenType.TPLUS;   // +
+            case NSUB -> TokenType.TMINS;   // -
+            case NMUL -> TokenType.TSTAR;   // *
+            case NDIV -> TokenType.TDIVD;   // /
+            case NMOD -> TokenType.TPERC;   // %
+            case NPOW -> TokenType.TCART;   // ^
+    
+            // --- Relational ---
+            case NLSS -> TokenType.TLESS;   // <
+            case NGRT -> TokenType.TGRTR;   // >
+            case NLEQ -> TokenType.TLEQL;   // <=
+            case NGEQ -> TokenType.TGEQL;   // >=
+            case NEQL -> TokenType.TEQEQ;   // ==
+            case NNEQ -> TokenType.TNEQL;   // !=
+    
+            // --- Boolean ---
+            case NNOT -> TokenType.TNOTT;   // not
+            case NAND -> TokenType.TTAND;   // and
+            case NOR  -> TokenType.TTTOR;   // or
+            case NXOR -> TokenType.TTXOR;   // xor
+    
+            // --- Assignment ---
+            case NASGN -> TokenType.TEQUL;  // =
+            case NPLEQ -> TokenType.TPLEQ;  // +=
+            case NMNEQ -> TokenType.TMNEQ;  // -=
+            case NSTEA -> TokenType.TSTEQ;  // *=
+            case NDVEQ -> TokenType.TDVEQ;  // /=
+    
+            default -> TokenType.TUNDF;     // fallback
+        };
+    }
+
+    // for error reporting
+    private Token tokenAtOp(StNode n) {
+        return tokenAt(n, tokenTypeForOp(n.kind));
+    }
 
     // check the type and return a printable string from it
     private String printable(Type t) {
@@ -91,6 +131,14 @@ public final class SemanticAnalyzer {
             }
         }
         return n.lexeme;
+    }
+
+    // create a token at this point, for tracking line and col nums accurately
+    private Token tokenAt(StNode n, TokenType tt) {
+        int line = (n != null && n.line >= 0) ? n.line : 0;
+        int col  = (n != null && n.col  >= 0) ? n.col  : 0;
+        String lx = (n != null) ? n.lexeme : null;
+        return new Token(tt, lx, line, col);
     }
 
     // converts NSTYPE nodes into an actual Type
@@ -135,14 +183,14 @@ public final class SemanticAnalyzer {
     // check if a name already exists in a scope
     private void defineOrDup(Symbol s, StNode at) {
         if (!table.define(s)) {
-            er.semantic("Semantic: duplicate identifier in this scope: '" + s.name() + "'", null);
+            er.semantic("Semantic: duplicate identifier in this scope: '" + s.name() + "'", tokenAt(at, TokenType.TIDEN));
         }
     }
 
     // ensure the left hand value is actually a variable that can handle assignment - id, arr[index], arr[index].field
     private void ensureLValue(StNode n) {
         boolean ok = n.kind == StNodeKind.NSIMV || n.kind == StNodeKind.NAELT || n.kind == StNodeKind.NARRV;
-        if (!ok) er.semantic("Semantic: left side of assignment must be a variable", null);
+        if (!ok) er.semantic("Semantic: left side of assignment must be a variable", tokenAt(n, TokenType.TIDEN));
     }
 
     // if either type is real, result is real, otherwise its in an int
@@ -225,7 +273,7 @@ public final class SemanticAnalyzer {
 
         // compare the names to check if its consistent
         if (head != null && tail != null && !head.equals(tail)) {
-            er.semantic("Semantic: program end name '" + tail + "' does not match header '" + head + "'", null);
+            er.semantic("Semantic: program end name '" + tail + "' does not match header '" + head + "'", tokenAt(prog, TokenType.TCD25));
         }
     }
 
@@ -247,7 +295,7 @@ public final class SemanticAnalyzer {
 
             String fname = firstName(f);
             if (fname == null) {
-                er.semantic("Semantic: function missing name", null);
+                er.semantic("Semantic: function missing name", tokenAt(nfuncs, TokenType.TFUNC));
                 continue;
             }
 
@@ -255,7 +303,7 @@ public final class SemanticAnalyzer {
             Type rType = typeFromNode(rtNode);
 
             if (rType == null) {
-                er.semantic("Semantic: unknown or missing return type for function '" + fname + "'", null);
+                er.semantic("Semantic: unknown or missing return type for function '" + fname + "'", tokenAt(nfuncs, TokenType.TFUNC));
                 rType = new Type.Error();
             }
 
@@ -263,7 +311,7 @@ public final class SemanticAnalyzer {
 
             for (int i = 0; i < paramTypes.size(); i++) {
                 if (paramTypes.get(i) == null) {
-                    er.semantic("Semantic: parameter '" + (i + 1) + "' of function '" + fname + "' has unknown/invalid type", null);
+                    er.semantic("Semantic: parameter '" + (i + 1) + "' of function '" + fname + "' has unknown/invalid type", tokenAt(nfuncs, TokenType.TFUNC));
                 }
             }
 
@@ -313,8 +361,33 @@ public final class SemanticAnalyzer {
 
     // declare locals
     private void declareLocal(StNode d) {
+        switch (d.kind) {
+            case NSDECL -> defineSimpleDecl(d);
+            case NARRD -> defineArrayDecl(d, firstName(d));
 
+            default -> {
+                StNode arrd = firstChild(d, StNodeKind.NARRD);
+                if (arrd != null) defineArrayDecl(arrd, firstName(d));
+            }
+        }
     }
+
+    private void defineSimpleDecl(StNode nsdecl) {
+        String name = firstName(nsdecl);
+
+        Type t = typeFromNode(firstChild(nsdecl, StNodeKind.NSTYPE));
+        if (t == null) {
+            er.semantic("Semantic: unknown type for '" + name + "'", tokenAt(nsdecl, TokenType.TUNDF)); 
+            t = new Type.Error();
+        }
+        defineOrDup(new VarSymbol(name, t), nsdecl);
+    }
+
+    // nameOverride if the caller already knows the name of the array e.g. in declareLocal we call
+    // firstName(d)
+    private void defineArrayDecl(StNode d, String nameOverride) {
+
+    } 
 
     // statement dispatcher
     private void visitStat(StNode s) {
@@ -339,7 +412,7 @@ public final class SemanticAnalyzer {
         Symbol s = table.resolve(name); // check the symbol is actually declared in a scope somewhere
 
         if (s == null) {
-            er.semantic("Semantic: identifier used before declaration: " + name, null);
+            er.semantic("Semantic: identifier used before declaration: " + name, tokenAt(at, TokenType.TIDEN));
             return new Type.Error();
         }
 
@@ -359,13 +432,13 @@ public final class SemanticAnalyzer {
 
         // if base type is not an array, error
         if (!(bt instanceof Type.Array a)) { // pattern matching - instanceof checks if object is specific type, if true creates a new variable and assigns the object to it
-            er.semantic("Semantic: indexed expression is not an array: " + base.lexeme, null);
+            er.semantic("Semantic: indexed expression is not an array: " + base.lexeme, tokenAt(n, TokenType.TLBRK));
             return new Type.Error();
         }
 
         // if index type is not an int, error
         if (!(it instanceof Type.Int)) {
-            er.semantic("Semantic: array index must be an integer", null);
+            er.semantic("Semantic: array index must be an integer", tokenAt(n, TokenType.TLBRK));
             return new Type.Error();
         }
 
@@ -385,7 +458,7 @@ public final class SemanticAnalyzer {
 
         // ensure the element is a struct
         if (!(elem instanceof Type.Struct s)) {
-            er.semantic("Semantic: array element is not a struct, cannot select field '" + field.lexeme + "'" , null);
+            er.semantic("Semantic: array element is not a struct, cannot select field '" + field.lexeme + "'" , tokenAt(n, TokenType.TIDEN));
             return new Type.Error();
         }
         
@@ -394,7 +467,7 @@ public final class SemanticAnalyzer {
 
         // unknown field, error
         if (ft == null) {
-            er.semantic("Semantic: unknown field '" + field.lexeme + "' in struct", null);
+            er.semantic("Semantic: unknown field '" + field.lexeme + "' in struct", tokenAt(n, TokenType.TIDEN));
             return new Type.Error();
         }
 
@@ -412,12 +485,12 @@ public final class SemanticAnalyzer {
         if (n.kind == StNodeKind.NPOW) {
         
             if (!Type.isNumeric(a)) {
-                er.semantic("Semantic: left operand of '^' must be numeric, got " + printable(a), null);
+                er.semantic("Semantic: left operand of '^' must be numeric, got " + printable(a), tokenAt(n, TokenType.TCART));
                 return new Type.Error();
             }
         
             if (!(b instanceof Type.Int)) {
-                er.semantic("Semantic: right operand of '^' must be integer, got " + printable(b), null);
+                er.semantic("Semantic: right operand of '^' must be integer, got " + printable(b), tokenAt(n, TokenType.TCART));
                 return new Type.Error();
             }
         
@@ -427,12 +500,12 @@ public final class SemanticAnalyzer {
         Type r = numericResult(a, b);
 
         if (r == null) {
-            er.semantic("Semantic: arithmetic operands must be numeric, got " + printable(a) + " and " + printable(b), null);
+            er.semantic("Semantic: arithmetic operands must be numeric, got " + printable(a) + " and " + printable(b), tokenAtOp(n));
             return new Type.Error();
         }
 
         if (n.kind == StNodeKind.NMOD && !(a instanceof Type.Int && b instanceof Type.Int)) {
-            er.semantic("Semantic: operator '%' requires integer operands", null);
+            er.semantic("Semantic: operator '%' requires integer operands", tokenAt(n, TokenType.TPERC));
             return new Type.Error();
         }
 
@@ -451,7 +524,7 @@ public final class SemanticAnalyzer {
                 if (Type.isNumeric(a) && Type.isNumeric(b)) {
                     return new Type.Bool();
                 }
-                er.semantic("Semantic: relational operator requires numeric operands, got " + printable(a) + " and " + printable(b) , null);
+                er.semantic("Semantic: relational operator requires numeric operands, got " + printable(a) + " and " + printable(b) , tokenAtOp(n));
                 return new Type.Error();
             }
 
@@ -461,12 +534,12 @@ public final class SemanticAnalyzer {
                 if (bothNumeric || bothBool) {
                     return new Type.Bool();
                 }
-                er.semantic("Semantic: '=='/'!=' require both numeric or both boolean got " + printable(a) + " and " + printable(b), null);
+                er.semantic("Semantic: '=='/'!=' require both numeric or both boolean got " + printable(a) + " and " + printable(b), tokenAtOp(n));
                 return new Type.Error();
             }
 
             default -> {
-                er.semantic("Semantic: internal error: typeOfRel called on " + n.kind, null);
+                er.semantic("Semantic: internal error: typeOfRel called on " + n.kind, tokenAt(n, TokenType.TUNDF));
                 return new Type.Error();
             }
         }
@@ -476,7 +549,7 @@ public final class SemanticAnalyzer {
         Type t = typeOf(n.children().get(0));
 
         if (!(t instanceof Type.Bool)) {
-            er.semantic("Semantic: 'not' requires boolean operand, got " + printable(t), null);
+            er.semantic("Semantic: 'not' requires boolean operand, got " + printable(t), tokenAt(n, TokenType.TNOTT));
             return new Type.Error();
         }
 
@@ -488,7 +561,7 @@ public final class SemanticAnalyzer {
         Type b = typeOf(n.children().get(1));
 
         if (!(a instanceof Type.Bool && b instanceof Type.Bool)) {
-            er.semantic("Semantic: boolean operator requries boolean operands, got " + printable(a) + " and " + printable(b), null);
+            er.semantic("Semantic: boolean operator requries boolean operands, got " + printable(a) + " and " + printable(b), tokenAtOp(n));
             return new Type.Error();
         }
 
@@ -542,7 +615,7 @@ public final class SemanticAnalyzer {
 
         if (!assignable(lt, rt)) {
             Token pos = new Token(TokenType.TIDEN, left.lexeme, left.line, left.col);
-            er.semantic("Semantic: cannot assign " + printable(rt) + " to " + printable(lt), pos);
+            er.semantic("Semantic: cannot assign " + printable(rt) + " to " + printable(lt), tokenAtOp(asgn));
         }
 
     }
@@ -571,8 +644,7 @@ public final class SemanticAnalyzer {
                     if (t instanceof Type.Error) continue;
 
                     if (t instanceof Type.Array || t instanceof Type.Struct || t instanceof Type.VoidT) {
-                        Token pos = new Token(TokenType.TIDEN, v.lexeme, v.line, v.col);
-                        er.semantic("Semantic: cannot read into " + printable(t), pos);
+                        er.semantic("Semantic: cannot read into " + printable(t), tokenAt(io, TokenType.TINPT));
                     }
                 }
             }
@@ -586,8 +658,7 @@ public final class SemanticAnalyzer {
 
                     if (t instanceof Type.Error) continue;
                     if (t instanceof Type.VoidT) {
-                        Token pos = new Token(TokenType.TOUTP, null, pr.line, pr.col);
-                        er.semantic("Semantic: cannot print value of type void", pos);
+                        er.semantic("Semantic: cannot print value of type void", tokenAt(io, TokenType.TOUTP));
                     }
                 }
             }
@@ -601,8 +672,7 @@ public final class SemanticAnalyzer {
                     
                     if (t instanceof Type.Error) continue;
                     if (t instanceof Type.VoidT) {
-                        Token pos = new Token(TokenType.TOUTP, null, pr.line, pr.col);
-                        er.semantic("Semantic: cannot print value of type void", pos);
+                        er.semantic("Semantic: cannot print value of type void", tokenAt(io, TokenType.TOUTL));
                     }
                 }
             }
@@ -647,8 +717,7 @@ public final class SemanticAnalyzer {
         if (cond != null) {
             Type ct = typeOf(cond);
             if(!(ct instanceof Type.Error) && !(ct instanceof Type.Bool)) {
-                Token pos = new Token(TokenType.TOUTP, null, cond.line, cond.col);
-                er.semantic("Semantic: for-loop condition must be boolean, got " + printable(ct),  pos);
+                er.semantic("Semantic: for-loop condition must be boolean, got " + printable(ct),  tokenAt(cond, TokenType.TTFOR));
             }
         }
 
@@ -684,8 +753,7 @@ public final class SemanticAnalyzer {
         if (cond != null) {
             Type ct = typeOf(cond);
             if (!(ct instanceof Type.Error) && !(ct instanceof Type.Bool)) {
-                Token pos = new Token(TokenType.TOUTP, null, cond.line, cond.col);
-                er.semantic("Semantic: Repeat-until condition must be boolean, got " + printable(ct),  pos);
+                er.semantic("Semantic: Repeat-until condition must be boolean, got " + printable(ct),  tokenAt(cond, TokenType.TUNTL));
             }
         }
     }
@@ -697,8 +765,7 @@ public final class SemanticAnalyzer {
         if (cond != null) {
             Type ct = typeOf(cond);
             if (!(ct instanceof Type.Error) && !(ct instanceof Type.Bool)) {
-                Token pos = new Token(TokenType.TOUTP, null, cond.line, cond.col);
-                er.semantic("Semantic: If condition must be boolean, got " + printable(ct),  pos);
+                er.semantic("Semantic: If condition must be boolean, got " + printable(ct),  tokenAt(cond, TokenType.TIFTH));
             }
         }
 

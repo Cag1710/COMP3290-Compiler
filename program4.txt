@@ -1,0 +1,17 @@
+CD25 test4
+main
+    x : integer,
+    y : integer,
+    result : integer
+begin
+    x = 5;
+    y = 10;
+
+    if (x + y) 
+        result = x + y;
+    else
+        result = true;
+    end
+
+    Out << "Result: ", result << Line;
+end CD25 test4

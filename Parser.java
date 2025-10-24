@@ -157,7 +157,7 @@ public class Parser {
 
         StNode init = new StNode(StNodeKind.NINIT, iden.lexeme, ts.peek().line, ts.peek().col);
         init.add(StNode.leaf(StNodeKind.NSIMV, iden));
-        StNode expr = parseExpr();
+        StNode expr = parseBool();
         init.add(expr);
         return init;
     }

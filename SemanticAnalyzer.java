@@ -204,6 +204,42 @@ public final class SemanticAnalyzer {
         return null;
     }
 
+    private static boolean isWhole(double d) {
+        return !Double.isNaN(d) && !Double.isInfinite(d) && Math.floor(d) == d;
+    }
+
+    // to check whether the expr node is valid for constants
+    private boolean isConstExpr(StNode n) {
+        switch (n.kind) {
+            case NILIT, NFLIT, NTRUE, NFALS -> {
+                return true;
+            }
+    
+            case NNOT -> {
+                return n.children().size() == 1 && isConstExpr(n.children().get(0));
+            }
+    
+            case NADD, NSUB, NMUL, NDIV, NMOD, NPOW,
+                 NEQL, NNEQ, NGRT, NLSS, NGEQ, NLEQ,
+                 NAND, NOR, NXOR -> {
+                return n.children().size() == 2 &&
+                       isConstExpr(n.children().get(0)) &&
+                       isConstExpr(n.children().get(1));
+            }
+    
+            case NSIMV, NARRV, NAELT, NFCALL -> {
+                return false;
+            }
+    
+            default -> {
+                if (!n.children().isEmpty() && n.children().size() == 1) {
+                    return isConstExpr(n.children().get(0));
+                }
+                return false;
+            }
+        }
+    }
+
     // takes in a node and returns its type
     // used to check when only specific types are allowed e.g. in assignment, check the lhs and rhs types, if they cant be assigned to eachother, its an error, this will be expanded as we go along
     private Type typeOf(StNode n) {
@@ -287,7 +323,7 @@ public final class SemanticAnalyzer {
 
         if (consts != null) { declareConsts(consts); }
         if (structs != null) { declareStructs(structs); }
-        if (consts != null) { declareArrays(arrs); }
+        if (arrs != null) { declareArrays(arrs); }
     }
 
     private void declareConsts(StNode consts) {
@@ -299,11 +335,55 @@ public final class SemanticAnalyzer {
                 er.semantic("Semantic: constant missing identifier", tokenAt(c, TokenType.TCNST));
                 continue;
             }
+
+            // size < 2 means that we have an id probably but no expr
+            if (c.children().size() < 2) {
+                er.semantic("Semantic: constant missing expression", tokenAt(c, TokenType.TCNST));
+                continue;
+            }
             
             // get just the <expr> of the init
             StNode expr = c.children().get(1);
+            // make sure the expression is even valid for const
+            if (!isConstExpr(expr)) {
+                er.semantic("Semantic: constant '" + cname + "' must use a constant expression",
+                            tokenAt(c, TokenType.TCNST));
+                continue;
+            }
+
             Type cType = typeOf(expr);
+            // any of these types aren't valid for const
+            if (cType == null || cType instanceof Type.Error ||
+                cType instanceof Type.VoidT || cType instanceof Type.Array || cType instanceof Type.Struct) {
+                er.semantic("Semantic: invalid constant type for '" + cname + "': " + printable(cType),
+                            tokenAt(c, TokenType.TCNST));
+                continue;
+            }
+
             Object cVal = evalExpr(expr);
+
+            // if the type is int but the value is a double and the double is a whole number i.e. 3.0, then its safe to convert it to int
+            if (cType instanceof Type.Int && cVal instanceof Double d && isWhole(d)) {
+                cVal = d.intValue();
+            } else if (cType instanceof Type.Real && cVal instanceof Integer i) { // the opposite
+                cVal = i.doubleValue(); 
+            }
+
+            // if evalExpr returned null then for some reason whatevers there, we cant evaluate
+            if (cVal == null) {
+                er.semantic("Semantic: expression for constant '" + cname + "' is not evaluable",
+                            tokenAt(c, TokenType.TCNST));
+                continue;
+            }
+
+            // to make sure the type and value actually match
+            if (cType instanceof Type.Int   && !(cVal instanceof Integer) ||
+                cType instanceof Type.Real  && !(cVal instanceof Double)  ||
+                cType instanceof Type.Bool  && !(cVal instanceof Boolean)) {
+                er.semantic("Semantic: constant '" + cname + "' type/value mismatch; expected " + printable(cType),
+                            tokenAt(c, TokenType.TCNST));
+                continue;
+            }
 
             ConstSymbol cSym = new ConstSymbol(cname, cType, cVal);
             defineOrDup(cSym, c);
@@ -311,9 +391,75 @@ public final class SemanticAnalyzer {
     }
 
     private Object evalExpr(StNode expr) {
-        // TODO: implement expr evaluation for constant decl
+        
+        switch (expr.kind) {
+            case NILIT: return Integer.parseInt(expr.lexeme);
+            case NFLIT: return Double.parseDouble(expr.lexeme);
+            case NTRUE: return Boolean.TRUE;
+            case NFALS: return Boolean.FALSE;
 
-        return null;
+            case NNOT: {
+                Object a = evalExpr(expr.children().get(0));
+                return (a instanceof Boolean b) ? !b : null;
+            }
+
+            /**
+             * Explaining for one as it just applies to the rest
+             * if either side of the expression is a real, do the operation as if they are both doubles
+             * if neither side of the expression is a real, do the operation as if they were ints (technically toI not rly needed here, but used for consistency) 
+             */
+            case NADD: return num2(expr, (x,y) -> isReal(x,y) ? (toD(x) + toD(y)) : (toI(x) + toI(y))); 
+            case NSUB: return num2(expr, (x,y) -> isReal(x,y) ? (toD(x) - toD(y)) : (toI(x) - toI(y)));
+            case NMUL: return num2(expr, (x,y) -> isReal(x,y) ? (toD(x) * toD(y)) : (toI(x) * toI(y)));
+            case NDIV: return num2(expr, (x,y) -> isReal(x,y) ? (toD(x) / toD(y)) : safeIntDiv(toI(x), toI(y))); // safeIntDiv makes sure y isnt 0
+
+            // same thing as safeIntDiv, safeIntMod checks if y is 0, but applies %
+            case NMOD: return num2(expr, (x,y) -> safeIntMod(toI(x), toI(y)));
+            /**
+             * e.g. 3 ^ 2
+             * a = int
+             * b = int
+             * if a isnt a int or double return null, if b is anything but an int return null
+             * type cast exponent since its an object type rn
+             * if a is a double, pattern match, create new double da, apply the operation
+             * otherwise apply the operation but as if they were ints (Math.pow returns double so custom method)
+             */
+            case NPOW: {
+                Object a = evalExpr(expr.children().get(0));
+                Object b = evalExpr(expr.children().get(1));
+                if (!(a instanceof Integer || a instanceof Double) || !(b instanceof Integer)) return null;
+                int e = (Integer) b;
+                if (a instanceof Double da) return Math.pow(da, e);
+                return intPow((Integer) a, e);
+            }
+
+            case NEQL: return rel(expr, (x,y) -> cmp(x,y) == 0);
+            case NNEQ: return rel(expr, (x,y) -> cmp(x,y) != 0);
+            case NGRT: return rel(expr, (x,y) -> cmp(x,y) > 0);
+            case NLSS: return rel(expr, (x,y) -> cmp(x,y) < 0);
+            case NGEQ: return rel(expr, (x,y) -> cmp(x,y) >= 0);
+            case NLEQ: return rel(expr, (x,y) -> cmp(x,y) <= 0);
+
+            case NAND: {
+                Object a = evalExpr(expr.children().get(0));
+                Object b = evalExpr(expr.children().get(1));
+                return (a instanceof Boolean x && b instanceof Boolean y) ? (x && y) : null;
+            }
+            case NOR: {
+                Object a = evalExpr(expr.children().get(0));
+                Object b = evalExpr(expr.children().get(1));
+                return (a instanceof Boolean x && b instanceof Boolean y) ? (x || y) : null;
+            }
+            case NXOR: {
+                Object a = evalExpr(expr.children().get(0));
+                Object b = evalExpr(expr.children().get(1));
+                return (a instanceof Boolean x && b instanceof Boolean y) ? (x ^ y) : null;
+            }
+
+            default:
+                if (expr.children().size() == 1) return evalExpr(expr.children().get(0));
+                return null;
+        }
     }
     
     // this refers to the <types> section changed to structs to save confusion with our Type class
@@ -408,7 +554,7 @@ public final class SemanticAnalyzer {
         table.exit();
 
         if (!(currentFuncReturnType instanceof Type.VoidT) && !sawReturnInCurrentFunc) {
-            er.semantic("Semantic: function '" + firstName(fund) + "' may not return a value on all paths", tokenAt(fund, TokenType.TVOID));
+            er.semantic("Semantic: function " + firstName(fund) + " is missting a return statement", tokenAt(fund, TokenType.TFUNC));
         }
 
         currentFuncReturnType = prevRet;
@@ -422,6 +568,12 @@ public final class SemanticAnalyzer {
      * 
      */
     private void visitMain(StNode nmain) {
+
+        Type prevRet = currentFuncReturnType;
+        boolean prevSaw = sawReturnInCurrentFunc;
+        currentFuncReturnType = new Type.VoidT();
+        sawReturnInCurrentFunc = false;
+
         table.enter();
 
         StNode dlist = firstChild(nmain, StNodeKind.NSDLST);
@@ -440,6 +592,9 @@ public final class SemanticAnalyzer {
         }
 
         table.exit();
+
+        currentFuncReturnType = prevRet;
+        sawReturnInCurrentFunc = prevSaw;
     }
 
     // declare locals
@@ -873,14 +1028,15 @@ public final class SemanticAnalyzer {
     private void visitReturn(StNode n) {
 
         boolean hasExpr = !n.children().isEmpty();
-        Type exprType = null;
+        Type exprType = hasExpr ? typeOf(n.children().get(0)) : null;
+
+        if (currentFuncReturnType == null) {
+            er.semantic("Semantic: 'return' not allowed at global scope", tokenAt(n, TokenType.TRETN));
+            return;
+        }
 
         if (hasExpr) {
             exprType = typeOf(n.children().get(0));
-        }
-
-        if (currentFuncReturnType == null) {
-            return;
         }
 
         if (currentFuncReturnType instanceof Type.VoidT) {
@@ -896,5 +1052,58 @@ public final class SemanticAnalyzer {
         }
 
         sawReturnInCurrentFunc = true;
+    }
+
+
+    private interface N2 { Object f(Object a, Object b); } // so we can take in the lambda function defined in evalExpr (x, y)
+
+    // applies a numeric operation on two nums
+    private Object num2(StNode n, N2 f) {
+        Object a = evalExpr(n.children().get(0));
+        Object b = evalExpr(n.children().get(1));
+        if (!isNum(a) || !isNum(b)) return null; // if neither side becomes a int or double, we cont do a numeric operation
+        return f.f(a, b); // both sides are numeric, produce the result 
+    }
+
+    private boolean isNum(Object o){ return o instanceof Integer || o instanceof Double; }
+    private boolean isReal(Object a, Object b){ return (a instanceof Double) || (b instanceof Double); }
+    private int toI(Object o){ return (o instanceof Integer i) ? i : ((Number) o).intValue(); }
+    private double toD(Object o){ return (o instanceof Double d) ? d : ((Number) o).doubleValue(); }
+
+    private Object safeIntDiv(int x, int y) { return (y == 0) ? null : (x / y); }
+    private Object safeIntMod(int x, int y) { return (y == 0) ? null : (x % y); }
+
+    // made so we return an int since Math.pow returns doubles, needed that gpt help with this one, my goat
+    private Object intPow(int base, int exp) {
+        if (exp < 0) return null;
+        long res = 1, b = base;
+        int e = exp;
+        while (e > 0) {
+            if ((e & 1) == 1) res *= b;
+            b *= b; e >>= 1;
+        }
+        return (int) res;
+    }
+
+    private interface R2 { boolean f(Object a, Object b); }
+
+    // same as num2 but for relational operators
+    private Object rel(StNode n, R2 r) {
+        Object a = evalExpr(n.children().get(0));
+        Object b = evalExpr(n.children().get(1));
+        if (a == null || b == null) return null;
+        return r.f(a, b);
+    }
+
+    /**
+     * Boolean.compare -> false is treated as less than true. so if x is true and y is false = x > y
+     * if they arent booleans, assume they are numeric, convert to doubles
+     * then just compare them on that, negatie if x < y, zero if equal, positive if x > y
+     * 
+     */
+    private int cmp(Object a, Object b) {
+        if (a instanceof Boolean ba && b instanceof Boolean bb) return Boolean.compare(ba, bb);
+        double x = toD(a), y = toD(b);
+        return Double.compare(x, y);
     }
 }

@@ -323,7 +323,9 @@ public final class SemanticAnalyzer {
 
         if (consts != null) { declareConsts(consts); }
         if (structs != null) { declareStructs(structs); }
+
         if (arrs != null) { declareArrays(arrs); }
+
     }
 
     private void declareConsts(StNode consts) {
@@ -391,7 +393,6 @@ public final class SemanticAnalyzer {
     }
 
     private Object evalExpr(StNode expr) {
-        
         switch (expr.kind) {
             case NILIT: return Integer.parseInt(expr.lexeme);
             case NFLIT: return Double.parseDouble(expr.lexeme);

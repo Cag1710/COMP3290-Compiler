@@ -29,8 +29,12 @@ sealed interface Type {
 enum SymbolKind { VAR, CONST, PARAM, FUNC, TYPE, FIELD }
 
 // all symbols must provide a name, a type, and a symbol kind
-sealed interface Symbol permits VarSymbol, ParamSymbol, FuncSymbol, TypeSymbol {
+sealed interface Symbol permits VarSymbol, ParamSymbol, FuncSymbol, TypeSymbol, ConstSymbol {
     String name(); Type type(); SymbolKind kind();
+}
+
+record ConstSymbol (String name, Type type, Object value) implements Symbol {
+    public SymbolKind kind() { return SymbolKind.CONST; }
 }
 
 record VarSymbol (String name, Type type) implements Symbol { 

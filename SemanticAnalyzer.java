@@ -270,6 +270,8 @@ public final class SemanticAnalyzer {
             case NNOT -> t = typeOfNot(n);
             case NAND, NOR, NXOR -> t = typeOfBoolBin(n);
 
+            case NFCALL -> t = typeOfNfCall(n);
+
             default -> t = new Type.Error();
         }
 
@@ -820,13 +822,68 @@ public final class SemanticAnalyzer {
         switch (s.kind) {
             case NASGN, NPLEQ, NMNEQ, NSTEA, NDVEQ -> visitAssign(s);
             case NINPUT, NOUTP, NOUTL -> visitIO(s);
-            case NCALL -> {}
             case NFORL, NREPT, NIFTH, NIFTE -> visitControls(s);
 
             case NRETN -> visitReturn(s);
 
+            case NCALL -> {
+                if (!s.children().isEmpty() && s.children().get(0).kind == StNodeKind.NFCALL) {
+                    StNode call = s.children().get(0);
+                    Type rt = typeOfNfCall(call);
+
+                    if (!(rt instanceof Type.VoidT)) {
+                        String fname = firstName(call);
+                        er.semantic("Semantic: cannot use value-returning function '" + fname + "' as a statement",
+                                    tokenAt(s, TokenType.TFUNC));
+                    }
+                }
+            }
+
             default -> {}
         }
+    }
+
+    private Type typeOfNfCall(StNode n) {
+        if (n == null || n.kind != StNodeKind.NFCALL) return new Type.Error();
+
+        String fname = firstName(n);
+        if (fname == null) {
+            er.semantic("Semantic: malformed function call (missing name)", tokenAt(n, TokenType.TFUNC));
+            return new Type.Error();
+        }
+
+        Symbol s = table.resolve(fname);
+        if (!(s instanceof FuncSymbol fs)) {
+            er.semantic("Semantic: '" + fname + "' is not a function", tokenAt(n, TokenType.TFUNC));
+            return new Type.Error();
+        }
+
+        List<StNode> kids = n.children();
+        StNode argList = (kids.size() >= 2 && kids.get(1).kind == StNodeKind.NALIST) ? kids.get(1) : null;
+        List<StNode> actuals = (argList != null) ? argList.children() : Collections.emptyList();
+
+        List<Type> formals = fs.paramTypes();
+
+        if (actuals.size() != formals.size()) {
+            er.semantic("Semantic: function '" + fname + "' expects " + formals.size() +
+                        " argument(s), got " + actuals.size(), tokenAt(n, TokenType.TFUNC));
+        }
+
+        int c = Math.min(actuals.size(), formals.size());
+        for (int i = 0; i < c; i++) {
+            Type at = typeOf(actuals.get(i));
+            Type ft = formals.get(i);
+
+            if (ft == null) continue;
+
+            if (!assignable(ft, at)) {
+                er.semantic("Semantic: argument " + (i + 1) + " of '" + fname +
+                            "' cannot accept " + printable(at) + " (expected " + printable(ft) + ")",
+                            tokenAt(n, TokenType.TFUNC));
+            }
+        }
+
+        return fs.returnType();
     }
 
     // Variables

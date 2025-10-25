@@ -6,6 +6,13 @@ public final class SemanticAnalyzer {
     private Type currentFuncReturnType = null;
     private boolean sawReturnInCurrentFunc = false;
 
+    // code gen stuff
+    private static final int WORD_BYTES = 8;
+    private int globalsNextOff = 0;     // base=1
+    private int funcLocalsNextOff = 16; // base=2 locals start at +16
+    private int funcParamsNextOff = -8; // base=2 params start at -8
+    private boolean inFunction = false; // true while inside a NFUND
+
     public SemanticAnalyzer(SymbolTable table, ErrorReporter er) {
         this.table = table;
         this.er = er;
@@ -609,6 +616,13 @@ public final class SemanticAnalyzer {
         boolean prevSaw = sawReturnInCurrentFunc;
         sawReturnInCurrentFunc = false;
 
+        boolean prevInFn = inFunction;
+        inFunction = true;
+        int prevLocals = funcLocalsNextOff;
+        int prevParams = funcParamsNextOff;
+        funcLocalsNextOff = 16;
+        funcParamsNextOff = -8;
+
         table.enter();
 
         StNode plist = firstChild(fund, StNodeKind.NPLIST);
@@ -628,6 +642,10 @@ public final class SemanticAnalyzer {
         }
 
         table.exit();
+
+        inFunction = prevInFn;
+        funcLocalsNextOff = prevLocals;
+        funcParamsNextOff = prevParams;
 
         if (!(currentFuncReturnType instanceof Type.VoidT) && !sawReturnInCurrentFunc) {
             er.semantic("Semantic: function " + firstName(fund) + " is missting a return statement", tokenAt(fund, TokenType.TFUNC));
@@ -744,7 +762,14 @@ public final class SemanticAnalyzer {
             er.semantic("Semantic: unknown parameter type for '" + pname + "'", tokenAt(at, TokenType.TIDEN));
             ptype = new Type.Error();
         }
-        defineOrDup(new ParamSymbol(pname, ptype, isConst), at);
+
+        ParamSymbol ps = new ParamSymbol(pname, ptype, isConst);
+
+        if (inFunction) {
+            ps.setAddr(2, funcParamsNextOff);
+            funcParamsNextOff -= WORD_BYTES;
+        }
+        defineOrDup(ps, at);
     }
 
     private ParamSymbol constParamOfLValue(StNode lv) {
@@ -777,7 +802,17 @@ public final class SemanticAnalyzer {
             er.semantic("Semantic: unknown type for '" + name + "'", tokenAt(nsdecl, TokenType.TUNDF)); 
             t = new Type.Error();
         }
-        defineOrDup(new VarSymbol(name, t), nsdecl);
+
+        VarSymbol vs = new VarSymbol(name, t);
+
+        if (inFunction) {
+            vs.setAddr(2, funcLocalsNextOff);
+            funcLocalsNextOff += WORD_BYTES;
+        } else {
+            vs.setAddr(1, globalsNextOff);
+            globalsNextOff += WORD_BYTES;
+        }
+        defineOrDup(vs, nsdecl);
     }
 
     // nameOverride if the caller already knows the name of the array e.g. in declareLocal we call
@@ -810,6 +845,16 @@ public final class SemanticAnalyzer {
 
         if (!(t instanceof Type.Array) && !(t instanceof Type.Error)) {
             er.semantic("Semantic: arrays section requires an array type; got " + printable(t) + " for '" + aname + "'", tokenAt(d, TokenType.TLBRK));
+        }
+
+        VarSymbol vs = new VarSymbol(aname, t);
+
+        if (inFunction) { // if inside a function
+            vs.setAddr(2, funcLocalsNextOff); // 2 -> current function scope
+            funcLocalsNextOff += WORD_BYTES; // increment the offset
+        } else {
+            vs.setAddr(1, globalsNextOff); // 1 -> global scope
+            globalsNextOff += WORD_BYTES; // increment the offset
         }
 
         defineOrDup(new VarSymbol(aname, t), d);

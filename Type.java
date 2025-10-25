@@ -41,7 +41,7 @@ record VarSymbol (String name, Type type) implements Symbol {
     public SymbolKind kind() { return SymbolKind.VAR; }
 }
 
-record ParamSymbol (String name, Type type) implements Symbol {
+record ParamSymbol (String name, Type type, Boolean isConst) implements Symbol {
     public SymbolKind kind() { return SymbolKind.PARAM; }
 }
 

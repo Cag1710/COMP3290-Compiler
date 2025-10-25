@@ -612,9 +612,92 @@ public final class SemanticAnalyzer {
 
     private void defineParams(StNode plist) {
         
+        if (plist == null || plist.kind != StNodeKind.NPLIST) return;
+
+        for (StNode p : plist.children()) {
+            switch (p.kind) {
+                
+                case NSIMP -> {
+                    for (StNode sd : p.children()) {
+                        if (sd.kind != StNodeKind.NSDECL) {
+                            String pname = firstName(sd);
+                            Type pt = typeFromNode(firstChild(sd, StNodeKind.NSTYPE));
+                            defineParamSymbol(pname, pt, false, sd);
+                        }
+                    }
+                }
+
+                case NARRP -> {
+                    String pname = firstName(p);
+                    String tname = (p.children().size() >= 2 && p.children().get(1).kind == StNodeKind.NSIMV)
+                        ? p.children().get(1).lexeme : null;
+
+                    if (pname == null || tname == null) {
+                        er.semantic("Semantic: malformed array parameter", tokenAt(p, TokenType.TIDEN));
+                        continue;
+                    }
+
+                    Type pt = baseTypeFromLexeme(tname);
+                    defineParamSymbol(pname, pt, false, p);
+                }
+
+                case NARRC -> {
+                    StNode arrd = firstChild(p, StNodeKind.NARRD);
+
+                    if (arrd == null) {
+                        er.semantic("Semantic: malformed const array parameter", tokenAt(p, TokenType.TCNST));
+                        continue;
+                    }
+
+                    String pname = firstName(arrd);
+                    String tname = (arrd.children().size() >= 2 && arrd.children().get(1).kind == StNodeKind.NSIMV)
+                            ? arrd.children().get(1).lexeme : null;
+
+                    if (pname == null || tname == null) {
+                        er.semantic("Semantic: malformed const array parameter", tokenAt(arrd, TokenType.TCNST));
+                        continue;
+                    }
+
+                    Type pt = baseTypeFromLexeme(tname);
+                    defineParamSymbol(pname, pt, true, p);
+                }
+
+                default -> er.semantic("Semantic: unknown parameter form", tokenAt(p, TokenType.TIDEN));
+            }
+        }
+    }
+
+    private void defineParamSymbol(String pname, Type ptype, boolean isConst, StNode at) {
+        if (ptype == null) {
+            er.semantic("Semantic: unknown parameter type for '" + pname + "'", tokenAt(at, TokenType.TIDEN));
+            ptype = new Type.Error();
+        }
+        defineOrDup(new ParamSymbol(pname, ptype, isConst), at);
+    }
+
+    private ParamSymbol constParamOfLValue(StNode lv) {
+        if (lv == null) return null;
+
+        switch (lv.kind) {
+            case NSIMV: {
+                Symbol s = lv.getSymbol();
+                if (s == null) s = table.resolve(lv.lexeme);
+                if (s instanceof ParamSymbol ps && ps.isConst()) return ps;
+                return null;
+            }
+            case NAELT:
+            case NARRV: {
+                StNode base = lv.children().isEmpty() ? null : lv.children().get(0);
+                return constParamOfLValue(base);
+            }
+            default:
+                return null;
+        }
     }
 
     private void defineSimpleDecl(StNode nsdecl) {
+        if (nsdecl == null || nsdecl.kind != StNodeKind.NSDECL) return;
+
         String name = firstName(nsdecl);
 
         Type t = typeFromNode(firstChild(nsdecl, StNodeKind.NSTYPE));
@@ -821,6 +904,13 @@ public final class SemanticAnalyzer {
         Type lt = typeOf(left);
 
         if (lt instanceof Type.Error) return; 
+
+        ParamSymbol cps = constParamOfLValue(left);
+        if (cps != null) {
+            er.semantic("Semantic: cannot assign to constant parameter '" + cps.name() + "'",
+                        tokenAtOp(asgn));
+            return;
+        }
 
         Type rt;
 

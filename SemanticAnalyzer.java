@@ -155,10 +155,10 @@ public final class SemanticAnalyzer {
         List<Type> out = new ArrayList<>();
         StNode plist = firstChild(f, StNodeKind.NPLIST);
         if (plist == null) return out;
-    
+
         for (StNode p : plist.children()) {
             switch (p.kind) {
-                case NSIMP -> { // simple parameters
+                case NSIMP -> {
                     for (StNode sd : p.children()) {
                         if (sd.kind == StNodeKind.NSDECL) {
                             Type t = typeFromNode(firstChild(sd, StNodeKind.NSTYPE));
@@ -166,21 +166,25 @@ public final class SemanticAnalyzer {
                         }
                     }
                 }
-                case NARRP, NARRC -> { // array parameters
+
+                case NARRP, NARRC -> {
                     StNode arrd = firstChild(p, StNodeKind.NARRD);
+                    String typeName = null;
                     if (arrd != null && arrd.children().size() >= 2) {
-                        String typeName = arrd.children().get(1).lexeme;
-                        Type named = baseTypeFromLexeme(typeName);      
-                        out.add(named); 
-                    } else {
-                        out.add(null);
+                        typeName = arrd.children().get(1).lexeme;
+                    } else if (p.children().size() >= 2 && p.children().get(1).kind == StNodeKind.NSIMV) {
+                        typeName = p.children().get(1).lexeme;
                     }
+                    Type named = (typeName != null) ? baseTypeFromLexeme(typeName) : null;
+                    out.add(named);
                 }
-                default -> {}
+
+                default -> { }
             }
         }
         return out;
     }
+
 
     // check if a name already exists in a scope
     private void defineOrDup(Symbol s, StNode at) {
@@ -463,12 +467,82 @@ public final class SemanticAnalyzer {
     }
     
     // this refers to the <types> section changed to structs to save confusion with our Type class
-    private void declareStructs(StNode structs) {
+    private void declareStructs(StNode ntypel) {
+        if (ntypel == null || ntypel.kind != StNodeKind.NTYPEL) return;
 
+        for (StNode t : ntypel.children()) {
+            switch (t.kind) {
+                case NRTYPE -> { 
+                    String typeName = firstName(t);
+                    if (typeName == null) {
+                        er.semantic("Semantic: struct type missing name", tokenAt(t, TokenType.TIDEN));
+                        continue;
+                    }
+                    Map<String, Type> fields = new LinkedHashMap<>();
+                    StNode flist = firstChild(t, StNodeKind.NFLIST);
+                    if (flist != null) {
+                        for (StNode sd : flist.children()) {
+                            if (sd.kind != StNodeKind.NSDECL) continue;
+                            String fname = firstName(sd);
+                            Type ftype = typeFromNode(firstChild(sd, StNodeKind.NSTYPE));
+                            if (fname == null || ftype == null) {
+                                er.semantic("Semantic: bad field in type '" + typeName + "'", tokenAt(sd, TokenType.TIDEN));
+                                ftype = new Type.Error();
+                            }
+                            fields.put(fname, ftype);
+                        }
+                    }
+                    defineOrDup(new TypeSymbol(typeName, new Type.Struct(fields)), t);
+                }
+
+                case NATYPE -> {
+                    List<StNode> kids = t.children();
+                    if (kids.size() < 3) {
+                        er.semantic("Semantic: malformed array type", tokenAt(t, TokenType.TLBRK));
+                        continue;
+                    }
+                    String typeName = kids.get(0).lexeme;     
+                    StNode sizeNode = kids.get(1);            
+                    String elemName = kids.get(2).lexeme;     
+
+                    Type elemType = baseTypeFromLexeme(elemName);
+                    if (elemType == null) {
+                        er.semantic("Semantic: unknown element type '" + elemName + "' for type '" + typeName + "'", tokenAt(t, TokenType.TIDEN));
+                        elemType = new Type.Error();
+                    }
+                    if (elemType instanceof Type.VoidT) {
+                        er.semantic("Semantic: array element type cannot be void for type '" + typeName + "'", tokenAt(t, TokenType.TLBRK));
+                        elemType = new Type.Error();
+                    }
+
+                    Object szVal = evalExpr(sizeNode);
+                    Integer size = (szVal instanceof Integer i) ? i
+                                : (szVal instanceof Double d && isWhole(d)) ? d.intValue()
+                                : null;
+                    if (size == null || size < 0) {
+                        er.semantic("Semantic: invalid array size for type '" + typeName + "'", tokenAt(t, TokenType.TLBRK));
+                        size = 0;
+                    }
+
+                    defineOrDup(new TypeSymbol(typeName, new Type.Array(elemType, size)), t);
+                }
+
+                default -> {
+                    
+                }
+            }
+        }
     }
 
     private void declareArrays(StNode arrs) {
-
+        for (StNode d : arrs.children()) {
+            if (d.kind == StNodeKind.NARRD) {
+                defineArrayDecl(d, firstName(d));
+            } else { // in the event that the node is like an extra step down, wrapped by a different node
+                StNode arrd = firstChild(d, StNodeKind.NARRD);
+                if (arrd != null) defineArrayDecl(arrd, firstName(arrd));
+            }
+        }
     }
 
     /** 
@@ -611,15 +685,13 @@ public final class SemanticAnalyzer {
     }
 
     private void defineParams(StNode plist) {
-        
         if (plist == null || plist.kind != StNodeKind.NPLIST) return;
 
         for (StNode p : plist.children()) {
             switch (p.kind) {
-                
                 case NSIMP -> {
                     for (StNode sd : p.children()) {
-                        if (sd.kind != StNodeKind.NSDECL) {
+                        if (sd.kind == StNodeKind.NSDECL) { // <-- FIX: was "!="
                             String pname = firstName(sd);
                             Type pt = typeFromNode(firstChild(sd, StNodeKind.NSTYPE));
                             defineParamSymbol(pname, pt, false, sd);
@@ -627,38 +699,35 @@ public final class SemanticAnalyzer {
                     }
                 }
 
-                case NARRP -> {
-                    String pname = firstName(p);
+                case NARRP -> { // non-const array param
+                    String pname = firstName(p); // first child NSIMV(arr)
                     String tname = (p.children().size() >= 2 && p.children().get(1).kind == StNodeKind.NSIMV)
-                        ? p.children().get(1).lexeme : null;
-
+                                    ? p.children().get(1).lexeme : null;
                     if (pname == null || tname == null) {
                         er.semantic("Semantic: malformed array parameter", tokenAt(p, TokenType.TIDEN));
                         continue;
                     }
-
-                    Type pt = baseTypeFromLexeme(tname);
+                    Type pt = baseTypeFromLexeme(tname); // should resolve to Type.Array
                     defineParamSymbol(pname, pt, false, p);
                 }
 
-                case NARRC -> {
+                case NARRC -> { // const array param (can come wrapped in NARRD)
                     StNode arrd = firstChild(p, StNodeKind.NARRD);
-
-                    if (arrd == null) {
+                    String pname, tname;
+                    if (arrd != null && arrd.children().size() >= 2) {
+                        pname = firstName(arrd);
+                        tname = arrd.children().get(1).lexeme;
+                    } else {
+                        // also accept the flat two-child shape
+                        pname = firstName(p);
+                        tname = (p.children().size() >= 2 && p.children().get(1).kind == StNodeKind.NSIMV)
+                                    ? p.children().get(1).lexeme : null;
+                    }
+                    if (pname == null || tname == null) {
                         er.semantic("Semantic: malformed const array parameter", tokenAt(p, TokenType.TCNST));
                         continue;
                     }
-
-                    String pname = firstName(arrd);
-                    String tname = (arrd.children().size() >= 2 && arrd.children().get(1).kind == StNodeKind.NSIMV)
-                            ? arrd.children().get(1).lexeme : null;
-
-                    if (pname == null || tname == null) {
-                        er.semantic("Semantic: malformed const array parameter", tokenAt(arrd, TokenType.TCNST));
-                        continue;
-                    }
-
-                    Type pt = baseTypeFromLexeme(tname);
+                    Type pt = baseTypeFromLexeme(tname); // should resolve to Type.Array
                     defineParamSymbol(pname, pt, true, p);
                 }
 
@@ -666,6 +735,7 @@ public final class SemanticAnalyzer {
             }
         }
     }
+
 
     private void defineParamSymbol(String pname, Type ptype, boolean isConst, StNode at) {
         if (ptype == null) {
@@ -711,8 +781,38 @@ public final class SemanticAnalyzer {
     // nameOverride if the caller already knows the name of the array e.g. in declareLocal we call
     // firstName(d)
     private void defineArrayDecl(StNode d, String nameOverride) {
+        if (d == null || d.kind != StNodeKind.NARRD) return;
 
-    } 
+        // name
+        String aname = (nameOverride != null) ? nameOverride : firstName(d);
+        if (aname == null) {
+            er.semantic("Semantic: array declaration missing identifier", tokenAt(d, TokenType.TIDEN));
+            return;
+        }
+
+        List<StNode> kids = d.children();
+        if (kids.size() < 2) {
+            er.semantic("Semantic: malformed array declaration for '" + aname + "'", tokenAt(d, TokenType.TLBRK));
+            return;
+        }
+
+        // second child is the type id
+        StNode typeNameNode = kids.get(1);
+        String tname = (typeNameNode != null) ? typeNameNode.lexeme : null;
+        Type t = baseTypeFromLexeme(tname);
+
+        if (t == null) {
+            er.semantic("Semantic: unknown element type for array '" + aname + "'", tokenAt(d, TokenType.TIDEN));
+            t = new Type.Error();
+        }
+
+        if (!(t instanceof Type.Array) && !(t instanceof Type.Error)) {
+            er.semantic("Semantic: arrays section requires an array type; got " + printable(t) + " for '" + aname + "'", tokenAt(d, TokenType.TLBRK));
+        }
+
+        defineOrDup(new VarSymbol(aname, t), d);
+    }
+
 
     // statement dispatcher
     private void visitStat(StNode s) {

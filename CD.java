@@ -4,14 +4,7 @@ import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 
-<<<<<<< HEAD
-import javax.sound.midi.SysexMessage;
-
-
-public class A2 {
-=======
 public class CD {
->>>>>>> 2b28f86216a3b1a4e53dc27d231a8a426e31ded5
     public static void main(String[] args) {
         if(args.length < 1) {
             System.out.println("No file inserted");

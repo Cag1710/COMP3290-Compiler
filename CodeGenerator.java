@@ -64,7 +64,9 @@ public class CodeGenerator {
             case NINPUT, NOUTP, NOUTL -> genIO(stat);
             case NFORL, NREPT, NIFTH, NIFTE -> genControls(stat);
             case NRETN -> genReturn(stat);
-            case NCALL -> {}
+            case NCALL -> {
+                // TODO: 
+            }
             default -> {}
         }
     }
@@ -286,7 +288,108 @@ public class CodeGenerator {
     }
 
     private void genControls(StNode n)  {
-         
+        switch (n.kind) {
+            case NFORL -> genFor(n);
+            case NREPT -> genRept(n);
+            case NIFTH, NIFTE -> genIf(n);
+            default -> {}
+        }
+    }
+
+    private void genFor(StNode n) {
+        StNode asgnList = n.children().get(0);
+        StNode cond = n.children().get(1);
+        StNode body = n.children().get(2);
+        // label generation for control flow
+        String startLabel = em.newLabel("for_start");
+        String endLabel = em.newLabel("for_end");
+        
+        // generate each assignment
+        if (asgnList != null) {
+            for (StNode init : asgnList.children()) {
+                genAssign(init);
+            }
+        }
+
+        em.label(startLabel);
+
+        // generate condition
+        if (cond != null) {
+            genExpression(cond);
+            em.emit("BF", endLabel);    // jump to end if pushed cond is false
+        }
+
+        // generate loop body
+        if (body != null) {
+            for (StNode stat : body.children()) {
+                genStatement(stat);
+            }
+        }
+
+        em.emit("BR", startLabel);      // jump back to start
+        em.label(endLabel);             // mark exit
+    }
+
+    private void genRept(StNode n) {
+        StNode asgnList = n.children().get(0);
+        StNode body = n.children().get(1);
+        StNode cond = n.children().get(2);
+        // label generation for control flow
+        String startLabel = em.newLabel("rept_start");
+
+        em.label(startLabel);
+
+        // generate assignments
+        if (asgnList != null) {
+            for (StNode init : asgnList.children()) {
+                genAssign(init);
+            }
+        }
+
+        // generate body statements
+        if (body != null) {
+            for (StNode stat : body.children()) {
+                genStatement(stat);
+            }
+        }
+
+        // generate and check repeat condition
+        if (cond != null) {
+            genExpression(cond);
+            em.emit("BF", startLabel);  // jump back to start if condition is false
+        }
+    }
+
+    private void genIf(StNode n) {
+        StNode cond = n.children().get(0);  // condition
+        StNode ifStats = n.children().get(1); // statements for IF block
+        StNode elseStats = (n.kind == StNodeKind.NIFTE) ? n.children().get(2) : null;   // statements for ELSE
+
+        String endLabel = em.newLabel("end_if");
+        String elseLabel = em.newLabel("else");
+
+        // gen condition
+        genExpression(cond);
+        em.emit("BF", elseLabel);   // skip if block if false
+
+        // generate if block
+        for (StNode stat : ifStats.children()) {
+            genStatement(stat);
+        }
+
+        if (elseStats != null) {
+            // jump to end label after if block to avoid else
+            em.emit("BR", endLabel);
+        }
+
+        // generate else block (if exists)
+        em.label(elseLabel);
+        if (elseStats != null) {
+            for (StNode stat : elseStats.children()) {
+                genStatement(stat);
+            }
+            em.label(endLabel);
+        }
     }
 
     private void genReturn(StNode n)  {

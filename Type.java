@@ -18,6 +18,14 @@ sealed interface Type {
     static boolean isNumeric(Type t) {
         return t instanceof Int || t instanceof Real;
     }
+
+    static boolean isInteger(Type t) {
+        return t instanceof Int;
+    }
+
+    static boolean isReal(Type t) {
+        return t instanceof Real;
+    }
     
     // check whether a type is a boolean
     static boolean isBool(Type t) {

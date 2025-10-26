@@ -4,10 +4,7 @@ import java.io.*;
 import java.nio.file.*;
 import java.util.*;
 
-import javax.sound.midi.SysexMessage;
-
-
-public class A2 {
+public class CD {
     public static void main(String[] args) {
         if(args.length < 1) {
             System.out.println("No file inserted");
@@ -39,6 +36,7 @@ public class A2 {
             oc.commitBuffer();
 
             TreePrinter.printReport(root, er, null, System.out);
+            TreePrinter.print(root);
             
 
         } catch(IOException e) {

@@ -8,8 +8,8 @@ types
     ArrayType is array [10] of Number end
 
 arrays
-    arrayToSum : ArrayType,
-    arrayToPrint : ArrayType
+    arrToSum : ArrayType,
+    arrToPrint : ArrayType
 
 /-- simple function to determine if a number is even
 func isEven (x : integer) : boolean
@@ -20,7 +20,8 @@ end
 
 /-- simple function to sum every element in the arr
 func sumArr (arr : ArrayType) : integer
-    sum : integer
+    sum : integer,
+    i : integer
 begin
     for (i = 0; i <= 10)
         sum += arr[i].x;
@@ -32,6 +33,7 @@ end
 /-- simple function to print every second element of an arr
 func printArr (const arr : ArrayType) : void
     /-- no local variables
+    i : integer
 begin
     for (i = 0; i <= 10) 
         if (isEven(i+1))

@@ -93,6 +93,15 @@ public final class StNode {
         return Collections.unmodifiableList(kids);
     }
 
+    // get specific child if exists
+    public StNode getChild(StNodeKind childKind) {
+        List<StNode> kids = children();
+        for (StNode k : kids) {
+            if (k.kind == childKind) return k;
+        }
+        return null;
+    }
+
     // special placeholder for undefined node, keeps tree consistent
     public static StNode undefAt(Token t) {
         return new StNode(StNodeKind.NUNDEF, null, 

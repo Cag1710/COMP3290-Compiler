@@ -39,7 +39,7 @@ public class OutputController {
     public void commitBuffer() throws IOException {
         addLineNum();
         for (int c : buff) { outputChar(c); }
-        if (errors.size() > 0) { outputErrors(); }
+        outputErrors();
     }
 
     /* Outputs one char at a time to the output file. */
@@ -62,8 +62,14 @@ public class OutputController {
     /* Outputs the errors to the listing file (if any) */
     private void outputErrors() throws IOException {
         fw.append("\n\tERRORS:\n-----------------------------------");
-        for (CompilerError e : errors) {
-            fw.append(e.toString());
+        if (errors.size() > 0) {
+            for (CompilerError e : errors) {
+                fw.append(e.toString());
+                fw.flush();
+            }
+        }
+        else {
+            fw.append("\nNo errors found.");
             fw.flush();
         }
     }

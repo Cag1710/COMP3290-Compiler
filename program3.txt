@@ -3,7 +3,8 @@ CD25 program3
 
 types 
     Number is 
-        val : integer
+        val : integer,
+        x : integer
     end
     ArrayType is array [10] of Number end
 

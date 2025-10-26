@@ -30,9 +30,6 @@ public class CodeGenerator {
         if (nfuncs != null) { genFuncs(nfuncs); }
 
         em.emit("HALT");
-
-        
-
     }
 
     private void genMain(StNode root) {
@@ -114,10 +111,54 @@ public class CodeGenerator {
         }
         else if (lhs.kind == StNodeKind.NARRV) {
             // handle array lhs (eg: arr[i].field)
-            // TODO: 
+            StNode arrId = lhs.children().get(0);
+            StNode index = lhs.children().get(1);
+            StNode field = lhs.children().get(2);
 
+            VarSymbol arrSym = (VarSymbol) table.resolve(arrId.lexeme);
+            // get the array type and therefore the struct type
+            Type.Array arrType = (Type.Array) arrSym.type();
+            Type.Struct elemStruct = (Type.Struct) arrType.elem();
 
+            em.emit("LV2", arrSym.base(), arrSym.offset());
+            genExpression(index);
+            em.emit("INDEX", typeSize(elemStruct));
+            int fieldOffset = computeFieldOffset(elemStruct, field.lexeme);
+            if (fieldOffset != 0) em.emit("STEP", fieldOffset);
+
+            em.emit("ST");
         }
+    }
+
+    // compute the size in words of a type
+    private int typeSize(Type t) {
+        if (t instanceof Type.Int || t instanceof Type.Real || t instanceof Type.Bool) {
+            return 1; // primitive types take 1 word
+        } else if (t instanceof Type.Array arr) {
+            // array size = number of elements * size of one element
+            return arr.size() * typeSize(arr.elem());
+        } else if (t instanceof Type.Struct s) {
+            // sum of sizes of all fields
+            int size = 0;
+            for (Type fieldType : s.fields().values()) {
+                size += typeSize(fieldType);
+            }
+            return size;
+        } else {
+            return 1; // default
+        }
+    }
+
+    // compute the offset in words of a field inside a struct
+    private int computeFieldOffset(Type.Struct s, String fieldName) {
+        int offset = 0;
+        for (Map.Entry<String, Type> entry : s.fields().entrySet()) {
+            if (entry.getKey().equals(fieldName)) {
+                return offset; // found the field, return offset
+            }
+            offset += typeSize(entry.getValue()); // add size of this field
+        }
+        return 0;  // default
     }
 
     private void genExpression(StNode expr) {
@@ -142,7 +183,7 @@ public class CodeGenerator {
                 genBinaryOp(expr);
             }
             case NARRV -> {
-                // TODO: generate array expr
+                genArrayExpr(expr);
             }
             case NFCALL -> {
                 // genFnCall(expr);
@@ -158,6 +199,7 @@ public class CodeGenerator {
                     case NLSS -> em.emit("LT");  
                     case NGEQ -> em.emit("GE");  
                     case NLEQ -> em.emit("LE"); 
+                    default -> {}
                 }
             }
             case NNOT -> { genExpression(expr.children().get(0)); em.emit("NOT"); }
@@ -171,6 +213,34 @@ public class CodeGenerator {
             }
         }
     }
+
+    private void genArrayExpr(StNode arrNode) {
+        // lhs is NARRV: <id>[<index>].<field>
+        StNode arrId = arrNode.children().get(0);
+        StNode index = arrNode.children().get(1);
+        StNode field = arrNode.children().get(2);
+
+        VarSymbol arrSym = (VarSymbol) table.resolve(arrId.lexeme);
+        Type.Array arrType = (Type.Array) arrSym.type();
+        Type.Struct elemStruct = (Type.Struct) arrType.elem();
+
+        // load array base
+        em.emit("LV2", arrSym.base(), arrSym.offset());
+
+        // generate index
+        genExpression(index);
+
+        // compute element address
+        em.emit("INDEX", typeSize(elemStruct));
+
+        // step to the correct field within the struct
+        int fieldOffset = computeFieldOffset(elemStruct, field.lexeme);
+        if (fieldOffset != 0) em.emit("STEP", fieldOffset);
+
+        // load the value from the computed address
+        em.emit("L");
+    }
+
 
     // push int literal onto stack
     private void pushIntLiteral(StNode expr) {

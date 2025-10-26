@@ -337,7 +337,7 @@ public class CodeGenerator {
 
         // generate if block
         for (StNode stat : ifStats.children()) {
-            genStatement(ifStats);
+            genStatement(stat);
         }
 
         if (elseStats != null) {
@@ -349,7 +349,7 @@ public class CodeGenerator {
         em.label(elseLabel);
         if (elseStats != null) {
             for (StNode stat : elseStats.children()) {
-                genStatement(elseStats);
+                genStatement(stat);
             }
             em.label(endLabel);
         }

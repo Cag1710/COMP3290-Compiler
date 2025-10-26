@@ -1,8 +1,13 @@
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 
 public class CodeGenerator {
     private final Emitter em;
     private final SymbolTable table;
+
+    private final Map<String, Integer> constPool = new LinkedHashMap<>();
+    private int constNextOff = 0; // bytes from b0 where we place next const
 
     public CodeGenerator(SymbolTable table, Emitter em) {
         this.table = table;
@@ -50,7 +55,7 @@ public class CodeGenerator {
     }
 
     private void genFuncs(StNode root) {
-
+        
     }
 
     private void genStatement(StNode stat) {
@@ -119,15 +124,7 @@ public class CodeGenerator {
                 pushIntLiteral(expr);
             }
             case NFLIT -> {
-                // build and push float onto stack
-                double val = Double.parseDouble(expr.lexeme);
-                if (val == 0.0) {
-                    em.emit("ZERO");
-                    em.emit("FTYPE");   // convert int 0 to float
-                }
-                else {
-                    pushNonZeroFloat(expr);
-                }
+                pushFloatLiteral(expr);
             }
             case NTRUE -> {
                 em.emit("TRUE");
@@ -148,7 +145,24 @@ public class CodeGenerator {
             case NFCALL -> {
                 // genFnCall(expr);
             }
-            case 
+            case NEQL, NNEQ, NGRT, NLSS, NGEQ, NLEQ -> {
+                genExpression(expr.children().get(0)); // lhs
+                genExpression(expr.children().get(1)); // rhs
+                em.emit("SUB");   
+                switch (expr.kind) {
+                    case NEQL -> em.emit("EQ");  
+                    case NNEQ -> em.emit("NE");  
+                    case NGRT -> em.emit("GT");  
+                    case NLSS -> em.emit("LT");  
+                    case NGEQ -> em.emit("GE");  
+                    case NLEQ -> em.emit("LE"); 
+                }
+            }
+            case NNOT -> { genExpression(expr.children().get(0)); em.emit("NOT"); }
+            case NAND -> { genExpression(expr.children().get(0)); genExpression(expr.children().get(1)); em.emit("AND"); }
+            case NOR  -> { genExpression(expr.children().get(0)); genExpression(expr.children().get(1)); em.emit("OR");  }
+            case NXOR -> { genExpression(expr.children().get(0)); genExpression(expr.children().get(1)); em.emit("XOR"); }
+
             default -> {
                 System.out.println("Cannot generate code: unknown expression kind.");
                 em.emit("TRAP");
@@ -173,20 +187,40 @@ public class CodeGenerator {
         }
     }
 
-    private void pushNonZeroFloat(StNode expr) {
+    private void pushFloatLiteral(StNode expr) {
         double val = Double.parseDouble(expr.lexeme);
-        int intPart = (int) val;
-        double fracPart = Math.abs(val - intPart);
 
-        if (intPart != 0) {
-            // push integer part to stack, convert to float
-            pushIntLiteral(expr);
+        if (val == 0.0) {
+            em.emit("ZERO");
             em.emit("FTYPE");
+            return;
         }
 
-        // TODO: finish this, I can't figure out the best way to add the fractional part to the stack
-        // there must be a way to push floats to the stack?
+        int off = internFloatConst(val);
+        em.emit("LA0", off);
+        em.emit("L");
 
+    }
+
+    private void pushStringLiteral(String s) {
+        int off = internStringConst(s);
+        em.emit("LA", off);
+        em.emit("STRPR");
+    }
+
+    // running memory map of float constants
+    private int internFloatConst(double d) {
+        String k = "F:" + Double.toString(d);
+        return constPool.computeIfAbsent(k, kk -> { int off = constNextOff; constNextOff += 8; return off; });
+    }
+
+    private int internStringConst(String s) {
+        String k = "S:" + s;
+        return constPool.computeIfAbsent(k, kk -> {
+            int off = constNextOff;
+            constNextOff += 8;
+            return off;
+        });
     }
 
     private void genBinaryOp(StNode expr) {
@@ -221,6 +255,7 @@ public class CodeGenerator {
             VarSymbol s = (VarSymbol) table.resolve(var.lexeme);
             if (Type.isInteger(s.type())) { em.emit("READI"); }
             else if (Type.isReal(s.type())) { em.emit("READF"); }
+            else { em.emit("TRAP"); continue; }
             // store the read val into the var location
             em.emit("LV2", s.base(), s.offset());
             em.emit("ST");    
@@ -233,11 +268,12 @@ public class CodeGenerator {
             em.emit("NEWLN");
             return;
         }
+        
         for (StNode child : n.children()) {
             switch (child.kind) {
                 case NSTRG -> {
-                    // TODO: handle string literals
-                    // need a way to store strings into addresses to use the STRPR opcode
+                    String s = child.lexeme;
+                    pushStringLiteral(s);
                 }
                 case NSIMV, NILIT, NFLIT, NADD, NSUB, NMUL, NDIV, NFCALL -> {
                     // handle expressions

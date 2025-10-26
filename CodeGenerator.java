@@ -57,25 +57,22 @@ public class CodeGenerator {
 
     private void genFunc(StNode f) {
         // function name
-        String name = f.lexeme;
+        StNode nameNode = f.getChild(StNodeKind.NSIMV);
+        String name = (nameNode != null) ? nameNode.lexeme : "<anon>";
         em.label(name);
         // function locals
-        int localCount = 0;
         StNode locals = f.getChild(StNodeKind.NDLIST);
+        int localCount = 0;
         if (locals != null) {
             for (StNode d : locals.children()) {
-                Symbol sym = d.getSymbol();
-                if (sym instanceof VarSymbol v) {
-                    localCount += Math.max(1, v.sizeWords());
-                } else {
-                    localCount += 1;
-                }
+                StNode id = (d.kind == StNodeKind.NSDECL)
+                    ? d.getChild(StNodeKind.NSIMV)
+                    : d.getChild(StNodeKind.NARRD).getChild(StNodeKind.NSIMV);
+                VarSymbol v = (VarSymbol) id.getSymbol();
+                localCount += Math.max(1, v.sizeWords());
             }
         }
-
-        if (localCount > 0) {
-            em.emit("ALLOC", localCount);
-        }
+        if (localCount > 0) em.emit("ALLOC", localCount);
         
         // function body
         StNode stats = f.getChild(StNodeKind.NSTATS);
@@ -88,8 +85,45 @@ public class CodeGenerator {
     }
 
     private void genGlobals(StNode nglob) {
-
+        StNode arrs = nglob.getChild(StNodeKind.NALIST);
+        if (arrs == null) return;
+    
+        for (StNode d : arrs.children()) {
+            StNode arrd = (d.kind == StNodeKind.NARRD) ? d : d.getChild(StNodeKind.NARRD);
+            if (arrd == null) continue;
+    
+            VarSymbol v = null;
+    
+            Symbol s = arrd.getSymbol();
+            if (s instanceof VarSymbol vs1) v = vs1;
+    
+            if (v == null) {
+                StNode id = arrd.getChild(StNodeKind.NSIMV);
+                if (id != null && id.getSymbol() instanceof VarSymbol vs2) v = vs2;
+            }
+    
+            if (v == null) {
+                StNode id = arrd.getChild(StNodeKind.NSIMV);
+                if (id != null && id.lexeme != null) {
+                    Symbol rs = table.resolve(id.lexeme);
+                    if (rs instanceof VarSymbol vs3) v = vs3;
+                }
+            }
+    
+            if (v == null) {
+                em.emit("TRAP");
+                continue;
+            }
+    
+            Type t = v.type();
+            if (!(t instanceof Type.Array at)) continue;
+    
+            em.emit("LA1", v.offset());
+            em.emit("LB", at.size());
+            em.emit("ARRAY");
+        }
     }
+    
 
     private void genCallCommon(String fn, List<StNode> args) {
         for (StNode a : args) {
@@ -101,26 +135,48 @@ public class CodeGenerator {
         em.emit("JS2"); // perform call
     }
 
-    private void gennFCall(StNode call) {
-
-        String fn = call.lexeme; // name
-        List<StNode> args = call.children(); // params
-        genCallCommon(fn, args);
+    private StNode unwrapCall(StNode n) {
+        if (n.kind == StNodeKind.NCALL && !n.children().isEmpty()
+            && n.children().get(0).kind == StNodeKind.NFCALL) {
+            return n.children().get(0);
+        }
+        return n;
     }
 
-    private void genCallStmt(StNode call) {
-        String fn = call.lexeme; // name
-        List<StNode> args = call.children(); // params
+    private FuncSymbol funcSymFromCall(StNode fcall) {
+        StNode nameNode = fcall.getChild(StNodeKind.NSIMV);
+        if (nameNode == null) {
+            throw new IllegalStateException("Malformed call: missing function name at "
+                + fcall.line + ":" + fcall.col);
+        }
+        Symbol s = nameNode.getSymbol();
+        if (s instanceof FuncSymbol fs) return fs;
 
-        Symbol s = table.resolve(fn);
-
-        if (s instanceof FuncSymbol fs && !(fs.returnType() instanceof Type.VoidT)) {
-            genCallCommon(fn, args);
-            em.emit("STEP");
-            return;
+        s = (nameNode.lexeme != null) ? table.resolve(nameNode.lexeme) : null;
+        if (!(s instanceof FuncSymbol fs2)) {
+            throw new IllegalStateException("Unbound function '" + nameNode.lexeme + "' at "
+                + nameNode.line + ":" + nameNode.col);
         }
 
-        genCallCommon(fn, args);
+        nameNode.setSymbol(fs2);
+        return fs2;
+    }
+
+    private void gennFCall(StNode call) {
+        StNode fcall = unwrapCall(call);
+        FuncSymbol fs = funcSymFromCall(fcall);
+        StNode argList = fcall.getChild(StNodeKind.NALIST);
+        List<StNode> args = (argList != null) ? argList.children() : List.of();
+        genCallCommon(fs.name(), args);
+    }
+    
+    private void genCallStmt(StNode call) {
+        StNode fcall = unwrapCall(call);
+        FuncSymbol fs = funcSymFromCall(fcall);
+        StNode argList = fcall.getChild(StNodeKind.NALIST);
+        List<StNode> args = (argList != null) ? argList.children() : List.of();
+        genCallCommon(fs.name(), args);
+        if (!(fs.returnType() instanceof Type.VoidT)) em.emit("STEP");
     }
 
     private void genStatement(StNode stat) {
@@ -185,23 +241,61 @@ public class CodeGenerator {
             }
         }
         else if (lhs.kind == StNodeKind.NARRV) {
-            // --- keep your original array/field handling exactly as-is ---
-            StNode arrId = lhs.children().get(0);
-            StNode index = lhs.children().get(1);
-            StNode field = lhs.children().get(2);
-    
-            VarSymbol arrSym = (VarSymbol) table.resolve(arrId.lexeme);
-            // get the array type and therefore the struct type
-            Type.Array arrType = (Type.Array) arrSym.type();
-            Type.Struct elemStruct = (Type.Struct) arrType.elem();
-    
-            em.emit("LV2", arrSym.base(), arrSym.offset());
-            genExpression(index);
-            em.emit("INDEX", typeSize(elemStruct));
-            int fieldOffset = computeFieldOffset(elemStruct, field.lexeme);
-            if (fieldOffset != 0) em.emit("STEP", fieldOffset);
-    
-            em.emit("ST");
+            StNode baseNode = lhs.children().get(0); // array id
+            StNode idxNode  = lhs.children().get(1); // index
+            StNode field    = lhs.children().get(2); // field id
+        
+            Symbol s = baseNode.getSymbol();
+            if (s == null && baseNode.lexeme != null) s = table.resolve(baseNode.lexeme);
+        
+            Integer base = null, off = null; Type t = null;
+            if (s instanceof VarSymbol vs) { base = vs.base(); off = vs.offset(); t = vs.type(); }
+            else if (s instanceof ParamSymbol ps) { base = ps.base(); off = ps.offset(); t = ps.type(); }
+            else { em.emit("TRAP"); return; }
+        
+            if (!(t instanceof Type.Array arrT) || !(arrT.elem() instanceof Type.Struct st)) {
+                em.emit("TRAP"); return;
+            }
+        
+            // Compute address of arr[i].field
+            em.emit("LV2", base, off);
+            genExpression(idxNode);
+            em.emit("INDEX");
+        
+            int foff = computeFieldOffset(st, field.lexeme);
+            if (foff > 0) em.emit("STEP", foff);
+        
+            switch (n.kind) {
+                case NASGN -> {
+                    genExpression(rhs);
+                    em.emit("ST");
+                }
+                case NPLEQ -> {
+                    em.emit("DUP"); em.emit("L");
+                    genExpression(rhs);
+                    em.emit("ADD");
+                    em.emit("ST");
+                }
+                case NMNEQ -> {
+                    em.emit("DUP"); em.emit("L");
+                    genExpression(rhs);
+                    em.emit("SUB");
+                    em.emit("ST");
+                }
+                case NSTEA -> {
+                    em.emit("DUP"); em.emit("L");
+                    genExpression(rhs);
+                    em.emit("MUL");
+                    em.emit("ST");
+                }
+                case NDVEQ -> {
+                    em.emit("DUP"); em.emit("L");
+                    genExpression(rhs);
+                    em.emit("DIV");
+                    em.emit("ST");
+                }
+                default -> em.emit("TRAP");
+            }
         }
     }
     
@@ -260,6 +354,9 @@ public class CodeGenerator {
             case NADD, NSUB, NMUL, NDIV, NMOD, NPOW -> {
                 genBinaryOp(expr);
             }
+            case NAELT -> {
+                genArrayIndexExpr(expr);
+            }
             case NARRV -> {
                 genArrayExpr(expr);
             }
@@ -268,8 +365,7 @@ public class CodeGenerator {
             }
             case NEQL, NNEQ, NGRT, NLSS, NGEQ, NLEQ -> {
                 genExpression(expr.children().get(0)); // lhs
-                genExpression(expr.children().get(1)); // rhs
-                em.emit("SUB");   
+                genExpression(expr.children().get(1)); // rhs  
                 switch (expr.kind) {
                     case NEQL -> em.emit("EQ");  
                     case NNEQ -> em.emit("NE");  
@@ -292,30 +388,66 @@ public class CodeGenerator {
         }
     }
 
+    private void genArrayIndexExpr(StNode n) {
+        StNode arrId = n.children().get(0);
+        StNode index = n.children().get(1);
+    
+        Symbol s = arrId.getSymbol();
+        if (s == null && arrId.lexeme != null) s = table.resolve(arrId.lexeme);
+    
+        Integer base = null, off = null; Type sType = null;
+        if (s instanceof VarSymbol vs) { base = vs.base(); off = vs.offset(); sType = vs.type(); }
+        else if (s instanceof ParamSymbol ps) { base = ps.base(); off = ps.offset(); sType = ps.type(); }
+        else { em.emit("TRAP"); return; }
+    
+        if (!(sType instanceof Type.Array arrT)) { em.emit("TRAP"); return; }
+    
+        // only scalars can be read via NAELT
+        if (arrT.elem() instanceof Type.Struct || arrT.elem() instanceof Type.Array) {
+            em.emit("TRAP");  // force caller to use NARRV (arr[i].field)
+            return;
+        }
+    
+        em.emit("LV2", base, off);
+        genExpression(index);
+        int elemSize = typeSize(((Type.Array) sType).elem());
+        em.emit("INDEX", elemSize);
+        em.emit("L");
+    }
+
     private void genArrayExpr(StNode arrNode) {
-        // lhs is NARRV: <id>[<index>].<field>
         StNode arrId = arrNode.children().get(0);
         StNode index = arrNode.children().get(1);
-        StNode field = arrNode.children().get(2);
-
-        VarSymbol arrSym = (VarSymbol) table.resolve(arrId.lexeme);
-        Type.Array arrType = (Type.Array) arrSym.type();
-        Type.Struct elemStruct = (Type.Struct) arrType.elem();
-
-        // load array base
-        em.emit("LV2", arrSym.base(), arrSym.offset());
-
-        // generate index
+        StNode field = (arrNode.children().size() > 2) ? arrNode.children().get(2) : null;
+    
+        Symbol s = arrId.getSymbol();
+        if (s == null && arrId.lexeme != null) s = table.resolve(arrId.lexeme);
+    
+        Integer base = null, off = null;
+        Type sType = null;
+        if (s instanceof VarSymbol vs) { base = vs.base(); off = vs.offset(); sType = vs.type(); }
+        else if (s instanceof ParamSymbol ps) { base = ps.base(); off = ps.offset(); sType = ps.type(); }
+        else { em.emit("TRAP"); return; }
+    
+        if (!(sType instanceof Type.Array arrT)) { em.emit("TRAP"); return; }
+    
+        // Must be array of struct for ".field"
+        if (field == null || !(arrT.elem() instanceof Type.Struct st)) {
+            em.emit("TRAP");
+            return;
+        }
+    
+        // desc, idx → INDEX → element address
+        em.emit("LV2", base, off);
         genExpression(index);
+        int elemSize = typeSize(st);    // st is the element struct type
+        em.emit("INDEX", elemSize);
 
-        // compute element address
-        em.emit("INDEX", typeSize(elemStruct));
+        // step to field inside the struct (in words)
+        int fieldOff = computeFieldOffset(st, field.lexeme);
+        if (fieldOff > 0) em.emit("STEP", fieldOff);
 
-        // step to the correct field within the struct
-        int fieldOffset = computeFieldOffset(elemStruct, field.lexeme);
-        if (fieldOffset != 0) em.emit("STEP", fieldOffset);
-
-        // load the value from the computed address
+        // load the field
         em.emit("L");
     }
 
@@ -354,7 +486,7 @@ public class CodeGenerator {
 
     private void pushStringLiteral(String s) {
         int off = internStringConst(s);
-        em.emit("LA", off);
+        em.emit("LA0", off);
         em.emit("STRPR");
     }
 
@@ -364,6 +496,7 @@ public class CodeGenerator {
         return constPool.computeIfAbsent(k, kk -> { int off = constNextOff; constNextOff += 8; return off; });
     }
 
+    // running memory map of string constants
     private int internStringConst(String s) {
         String k = "S:" + s;
         return constPool.computeIfAbsent(k, kk -> {
@@ -400,15 +533,18 @@ public class CodeGenerator {
     }
 
     private void genInput(StNode n) {
-        // for each varible in the input decl
-        for (StNode var : n.children()) {
-            VarSymbol s = (VarSymbol) table.resolve(var.lexeme);
-            if (Type.isInteger(s.type())) { em.emit("READI"); }
-            else if (Type.isReal(s.type())) { em.emit("READF"); }
+        List<StNode> vlist = n.children().isEmpty() ? List.of()
+                           : n.children().get(0).children();
+        for (StNode var : vlist) {
+            Symbol s = var.getSymbol();
+            if (!(s instanceof VarSymbol v)) { em.emit("TRAP"); continue; }
+    
+            if (Type.isInteger(v.type())) em.emit("READI");
+            else if (Type.isReal(v.type())) em.emit("READF");
             else { em.emit("TRAP"); continue; }
-            // store the read val into the var location
-            em.emit("LV2", s.base(), s.offset());
-            em.emit("ST");    
+    
+            em.emit("LV2", v.base(), v.offset());
+            em.emit("ST");
         }
     }
 
@@ -419,24 +555,20 @@ public class CodeGenerator {
             return;
         }
     
-        List<StNode> items;
-        if (!n.children().isEmpty() && n.children().get(0) != null) {
-            items = n.children().get(0).children(); 
-        } else {
-            items = n.children();
-        }
-    
-        for (StNode child : items) {
-            switch (child.kind) {
-                case NSTRG -> {
-                    pushStringLiteral(child.lexeme);
-                }
-                case NSIMV, NILIT, NFLIT, NADD, NSUB, NMUL, NDIV, NFCALL, NEQL, NNEQ, NGRT, NLSS, NGEQ, NLEQ -> {
-                    genExpression(child);
-                    em.emit("VALPR");
-                }
-                default -> {
-                    
+        StNode c = n.getChild(StNodeKind.NPRLST);
+        if (c != null) {
+            for (StNode child : c.children()) {
+                switch (child.kind) {
+                    case NSTRG -> {
+                        pushStringLiteral(child.lexeme);
+                    }
+                    case NSIMV, NILIT, NFLIT, NADD, NSUB, NMUL, NDIV, NFCALL, NEQL, NNEQ, NGRT, NLSS, NGEQ, NLEQ, NARRV -> {
+                        genExpression(child);
+                        em.emit("VALPR");
+                    }
+                    default -> {
+                        
+                    }
                 }
             }
         }
@@ -454,7 +586,7 @@ public class CodeGenerator {
             default -> {}
         }
     }
-
+    
     private void genFor(StNode n) {
         StNode asgnList = n.children().get(0);
         StNode cond = n.children().get(1);
@@ -515,7 +647,7 @@ public class CodeGenerator {
         // generate and check repeat condition
         if (cond != null) {
             genExpression(cond);
-            em.emit("BF", startLabel);  // jump back to start if condition is false
+            em.emit("BT", startLabel);  // jump back to start if condition is false
         }
     }
 
@@ -556,18 +688,15 @@ public class CodeGenerator {
             genExpression(n.children().get(0));
             em.emit("RVAL");
         }
-        em.emit("RETN");
     }
 
     private Symbol symOf(StNode n) {
         Symbol s = n.getSymbol();
         if (s == null) {
-            // As a fallback you *can* try resolve, but expect null for locals/params:
             s = (n.lexeme != null) ? table.resolve(n.lexeme) : null;
         }
         if (s == null) {
-            throw new IllegalStateException(
-                "Unbound identifier '" + n.lexeme + "' at " + n.line + ":" + n.col);
+            throw new IllegalStateException("Unbound identifier '" + n.lexeme + "' at " + n.line + ":" + n.col);
         }
         return s;
     }

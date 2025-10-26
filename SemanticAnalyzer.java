@@ -803,17 +803,16 @@ public final class SemanticAnalyzer {
 
     private void defineSimpleDecl(StNode nsdecl) {
         if (nsdecl == null || nsdecl.kind != StNodeKind.NSDECL) return;
-
+    
         String name = firstName(nsdecl);
-
         Type t = typeFromNode(firstChild(nsdecl, StNodeKind.NSTYPE));
         if (t == null) {
-            er.semantic("Semantic: unknown type for '" + name + "'", tokenAt(nsdecl, TokenType.TUNDF)); 
+            er.semantic("Semantic: unknown type for '" + name + "'", tokenAt(nsdecl, TokenType.TUNDF));
             t = new Type.Error();
         }
-
+    
         VarSymbol vs = new VarSymbol(name, t);
-
+    
         if (inFunction) {
             vs.setAddr(2, funcLocalsNextOff);
             funcLocalsNextOff += WORD_BYTES;
@@ -821,7 +820,11 @@ public final class SemanticAnalyzer {
             vs.setAddr(1, globalsNextOff);
             globalsNextOff += WORD_BYTES;
         }
+    
         defineOrDup(vs, nsdecl);
+        nsdecl.setSymbol(vs);
+        StNode idNode = firstChild(nsdecl, StNodeKind.NSIMV);
+        if (idNode != null) idNode.setSymbol(vs);
     }
 
     // nameOverride if the caller already knows the name of the array e.g. in declareLocal we call
@@ -857,16 +860,17 @@ public final class SemanticAnalyzer {
         }
 
         VarSymbol vs = new VarSymbol(aname, t);
-
-        if (inFunction) { // if inside a function
-            vs.setAddr(2, funcLocalsNextOff); // 2 -> current function scope
-            funcLocalsNextOff += WORD_BYTES; // increment the offset
+        if (inFunction) {
+            vs.setAddr(2, funcLocalsNextOff);
+            funcLocalsNextOff += WORD_BYTES;
         } else {
-            vs.setAddr(1, globalsNextOff); // 1 -> global scope
-            globalsNextOff += WORD_BYTES; // increment the offset
+            vs.setAddr(1, globalsNextOff);
+            globalsNextOff += WORD_BYTES;
         }
-
-        defineOrDup(new VarSymbol(aname, t), d);
+        defineOrDup(vs, d);
+        d.setSymbol(vs);                       
+        StNode idNode = firstChild(d, StNodeKind.NSIMV);
+        if (idNode != null) idNode.setSymbol(vs); 
     }
 
 
@@ -912,6 +916,8 @@ public final class SemanticAnalyzer {
             return new Type.Error();
         }
 
+        StNode nameNode = firstChild(n, StNodeKind.NSIMV);
+        if (nameNode != null) nameNode.setSymbol(fs);
         List<StNode> kids = n.children();
         StNode argList = (kids.size() >= 2 && kids.get(1).kind == StNodeKind.NALIST) ? kids.get(1) : null;
         List<StNode> actuals = (argList != null) ? argList.children() : Collections.emptyList();
@@ -1236,35 +1242,55 @@ public final class SemanticAnalyzer {
 
     private void visitFor(StNode n) {
         if (n == null || n.children().isEmpty()) return;
-
-        StNode trio = n.children().get(0);
-        StNode body = (n.children().size() > 1) ? n.children().get(1) : null;
-
+    
+        StNode first = n.children().get(0);
+        StNode maybeCond = (n.children().size() > 1) ? n.children().get(1) : null;
+        StNode body = null;
+    
         StNode init = null, cond = null;
-        if (trio != null && trio.kind == StNodeKind.NALIST) {
-            List<StNode> t = trio.children();
-            if (t.size() > 0 ) init = t.get(0);
-            if (t.size() > 1 ) cond = t.get(1);
-        }
-
-        if (init != null) {
-            switch (init.kind) {
-                case NASGN, NPLEQ, NMNEQ, NSTEA, NDVEQ -> visitAssign(init);
-                default -> typeOf(init);
+    
+        if (first != null && first.kind == StNodeKind.NALIST) {
+            init = first;
+            if (maybeCond != null) {
+                if (maybeCond.kind == StNodeKind.NSTATS) {
+                    body = maybeCond;
+                } else {
+                    cond = maybeCond;
+                    if (n.children().size() > 2 && n.children().get(2).kind == StNodeKind.NSTATS) {
+                        body = n.children().get(2);
+                    }
+                }
+            }
+        } else {
+            // defensive fallback: treat first as condition
+            cond = first;
+            if (n.children().size() > 1 && n.children().get(1).kind == StNodeKind.NSTATS) {
+                body = n.children().get(1);
             }
         }
-
+    
+        // init
+        if (init != null && init.kind == StNodeKind.NALIST) {
+            for (StNode a : init.children()) {
+                switch (a.kind) {
+                    case NASGN, NPLEQ, NMNEQ, NSTEA, NDVEQ -> visitAssign(a);
+                    default -> typeOf(a);
+                }
+            }
+        }
+    
+        // condition — this is what binds NSIMV 'i'
         if (cond != null) {
-            Type ct = typeOf(cond);
-            if(!(ct instanceof Type.Error) && !(ct instanceof Type.Bool)) {
-                er.semantic("Semantic: for-loop condition must be boolean, got " + printable(ct),  tokenAt(cond, TokenType.TTFOR));
+            Type ct = typeOf(cond); // ensures setSymbol() happens on all NSIMV under cond
+            if (!(ct instanceof Type.Error) && !(ct instanceof Type.Bool)) {
+                er.semantic("Semantic: for-loop condition must be boolean, got " + printable(ct),
+                            tokenAt(cond, TokenType.TTFOR));
             }
         }
-
+    
+        // body
         if (body != null && body.kind == StNodeKind.NSTATS) {
-            for (StNode s : body.children()) {
-                visitStat(s);
-            }
+            for (StNode s : body.children()) visitStat(s);
         }
     }
 

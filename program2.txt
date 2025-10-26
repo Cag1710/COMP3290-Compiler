@@ -24,5 +24,6 @@ begin
     /-- print out all values in the array
     for (i = 0; i <= 10)
         Out << arr[i].x << Line;
+        i += 1;
     end
 end CD25 program2

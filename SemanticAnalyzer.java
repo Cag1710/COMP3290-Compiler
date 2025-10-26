@@ -682,6 +682,7 @@ public final class SemanticAnalyzer {
         if (stats != null) {
             for (StNode s : stats.children()) {
                 visitStat(s);
+                visitStat(s);
             }
         }
 

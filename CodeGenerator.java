@@ -34,7 +34,6 @@ public class CodeGenerator {
 
     private void genMain(StNode root) {
         em.label("main");
-
         // allocate space for local vars
         StNode dlist = root.getChild(StNodeKind.NSDLST);
         if (dlist != null) {
@@ -61,7 +60,6 @@ public class CodeGenerator {
         // function name
         String name = f.lexeme;
         em.label(name);
-
         // function locals
         int localCount = 0;
         StNode locals = f.getChild(StNodeKind.NDLIST);
@@ -137,36 +135,45 @@ public class CodeGenerator {
         List<StNode> children = n.children();
         StNode lhs = children.get(0);
         StNode rhs = children.get(1);
-
-        // gen the rhs first
-        genExpression(rhs);
-
+    
         if (lhs.kind == StNodeKind.NSIMV) {
-            // handle simple var
-            VarSymbol s = (VarSymbol) table.resolve(lhs.lexeme);
+            // simple var
+            Symbol s = symOf(lhs);
+            int base, off;
+            if (s instanceof VarSymbol v) { base = v.base(); off = v.offset(); }
+            else if (s instanceof ParamSymbol p) { base = p.base(); off = p.offset(); }
+            else { em.emit("TRAP"); return; }
+    
             switch (n.kind) {
-                case NASGN -> { 
-                    em.emit("ST", s.base(), s.offset()); 
+                case NASGN -> {
+                    // x = RHS
+                    genExpression(rhs);
+                    em.emit("ST", base, off);
                 }
-                case NPLEQ -> {  
-                    em.emit("LV2", s.base(), s.offset());   // load current value first
-                    em.emit("ADD", s.base(), s.offset());   // add RHS
-                    em.emit("ST", s.base(), s.offset());
+                case NPLEQ -> {
+                    // x += RHS  ==>  x  RHS  ADD  -> x
+                    em.emit("LV2", base, off);
+                    genExpression(rhs);
+                    em.emit("ADD");
+                    em.emit("ST", base, off);
                 }
                 case NMNEQ -> {
-                    em.emit("LV2", s.base(), s.offset());
-                    em.emit("SUB", s.base(), s.offset());
-                    em.emit("ST", s.base(), s.offset());
+                    em.emit("LV2", base, off);
+                    genExpression(rhs);
+                    em.emit("SUB");
+                    em.emit("ST", base, off);
                 }
-                case NSTEA -> { 
-                    em.emit("LV2", s.base(), s.offset());
-                    em.emit("MUL", s.base(), s.offset());
-                    em.emit("ST", s.base(), s.offset());
+                case NSTEA -> {
+                    em.emit("LV2", base, off);
+                    genExpression(rhs);
+                    em.emit("MUL");
+                    em.emit("ST", base, off);
                 }
-                case NDVEQ -> { 
-                    em.emit("LV2", s.base(), s.offset());
-                    em.emit("DIV", s.base(), s.offset());
-                    em.emit("ST", s.base(), s.offset());
+                case NDVEQ -> {
+                    em.emit("LV2", base, off);
+                    genExpression(rhs);
+                    em.emit("DIV");
+                    em.emit("ST", base, off);
                 }
                 default -> {
                     System.out.println("Cannot generate code: unknown assign kind.");
@@ -175,25 +182,26 @@ public class CodeGenerator {
             }
         }
         else if (lhs.kind == StNodeKind.NARRV) {
-            // handle array lhs (eg: arr[i].field)
+            // --- keep your original array/field handling exactly as-is ---
             StNode arrId = lhs.children().get(0);
             StNode index = lhs.children().get(1);
             StNode field = lhs.children().get(2);
-
+    
             VarSymbol arrSym = (VarSymbol) table.resolve(arrId.lexeme);
             // get the array type and therefore the struct type
             Type.Array arrType = (Type.Array) arrSym.type();
             Type.Struct elemStruct = (Type.Struct) arrType.elem();
-
+    
             em.emit("LV2", arrSym.base(), arrSym.offset());
             genExpression(index);
             em.emit("INDEX", typeSize(elemStruct));
             int fieldOffset = computeFieldOffset(elemStruct, field.lexeme);
             if (fieldOffset != 0) em.emit("STEP", fieldOffset);
-
+    
             em.emit("ST");
         }
     }
+    
 
     // compute the size in words of a type
     private int typeSize(Type t) {
@@ -241,8 +249,10 @@ public class CodeGenerator {
                 em.emit("FALSE");
             }
             case NSIMV -> {
-                VarSymbol s = (VarSymbol) table.resolve(expr.lexeme);
-                em.emit("LV2", s.base(), s.offset());
+                Symbol s = symOf(expr);
+                if (s instanceof VarSymbol v)      em.emit("LV2", v.base(), v.offset());
+                else if (s instanceof ParamSymbol p) em.emit("LV2", p.base(), p.offset());
+                else em.emit("TRAP");
             }
             case NADD, NSUB, NMUL, NDIV, NMOD, NPOW -> {
                 genBinaryOp(expr);
@@ -533,5 +543,18 @@ public class CodeGenerator {
             em.emit("RVAL");
         }
         em.emit("RETN");
+    }
+
+    private Symbol symOf(StNode n) {
+        Symbol s = n.getSymbol();
+        if (s == null) {
+            // As a fallback you *can* try resolve, but expect null for locals/params:
+            s = (n.lexeme != null) ? table.resolve(n.lexeme) : null;
+        }
+        if (s == null) {
+            throw new IllegalStateException(
+                "Unbound identifier '" + n.lexeme + "' at " + n.line + ":" + n.col);
+        }
+        return s;
     }
 }

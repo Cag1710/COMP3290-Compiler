@@ -23,9 +23,8 @@ public class CodeGenerator {
         StNode nglob = root.getChild(StNodeKind.NGLOB);
         StNode nfuncs = root.getChild(StNodeKind.NFUNCS);
         StNode nmain = root.getChild(StNodeKind.NMAIN);
-        // do main first and then funcs
-        // TODO: globals confuse me
-        // if (nglob != null) { genGlobals(nglob); }
+        // globals, main, funcs
+        if (nglob != null) { genGlobals(nglob); }
         if (nmain != null) { genMain(nmain); }
         if (nfuncs != null) { genFuncs(nfuncs); }
 
@@ -86,6 +85,10 @@ public class CodeGenerator {
             }
         }
         em.emit("RETN");
+    }
+
+    private void genGlobals(StNode nglob) {
+
     }
 
     private void genCallCommon(String fn, List<StNode> args) {
@@ -410,25 +413,36 @@ public class CodeGenerator {
     }
 
     private void genOutput(StNode n) {
+        // Handle "Out << Line"
         if (n.kind == StNodeKind.NOUTL && n.children().isEmpty()) {
-            // Out << Line
             em.emit("NEWLN");
             return;
         }
-        
-        for (StNode child : n.children()) {
+    
+        List<StNode> items;
+        if (!n.children().isEmpty() && n.children().get(0) != null) {
+            items = n.children().get(0).children(); 
+        } else {
+            items = n.children();
+        }
+    
+        for (StNode child : items) {
             switch (child.kind) {
                 case NSTRG -> {
-                    String s = child.lexeme;
-                    pushStringLiteral(s);
+                    pushStringLiteral(child.lexeme);
                 }
-                case NSIMV, NILIT, NFLIT, NADD, NSUB, NMUL, NDIV, NFCALL -> {
-                    // handle expressions
+                case NSIMV, NILIT, NFLIT, NADD, NSUB, NMUL, NDIV, NFCALL, NEQL, NNEQ, NGRT, NLSS, NGEQ, NLEQ -> {
                     genExpression(child);
                     em.emit("VALPR");
                 }
-                default -> {}
+                default -> {
+                    
+                }
             }
+        }
+    
+        if (n.kind == StNodeKind.NOUTL) {
+            em.emit("NEWLN");
         }
     }
 

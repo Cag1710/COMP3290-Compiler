@@ -32,9 +32,13 @@ public class CD {
             StNode root = parser.parseProgram();
             SemanticAnalyzer sa = new SemanticAnalyzer(table, er);
             sa.analyze(root);
+            Emitter em = new Emitter();
+            CodeGenerator cg = new CodeGenerator(table, em);
+            cg.generate(root);
 
             oc.commitBuffer();
 
+            System.out.println(em.toString());
             TreePrinter.printReport(root, er, null, System.out);
             TreePrinter.print(root);
             

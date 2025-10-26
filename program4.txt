@@ -7,10 +7,10 @@ begin
     x = 5;
     y = 10;
 
-    if (x + y) 
+    if (x < y) 
         result = x + y;
     else
-        result = true;
+        result = x;
     end
 
     Out << "Result: ", result << Line;

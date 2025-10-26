@@ -668,6 +668,12 @@ public final class SemanticAnalyzer {
         currentFuncReturnType = new Type.VoidT();
         sawReturnInCurrentFunc = false;
 
+        boolean prevInFn   = inFunction;
+        int prevLocals     = funcLocalsNextOff;
+
+        inFunction = true;
+        funcLocalsNextOff = 16;   // same as functions
+
         table.enter();
 
         StNode dlist = firstChild(nmain, StNodeKind.NSDLST);
@@ -688,6 +694,8 @@ public final class SemanticAnalyzer {
 
         table.exit();
 
+        inFunction = prevInFn;
+        funcLocalsNextOff = prevLocals;
         currentFuncReturnType = prevRet;
         sawReturnInCurrentFunc = prevSaw;
     }

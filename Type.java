@@ -1,4 +1,5 @@
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 sealed interface Type {
@@ -10,7 +11,7 @@ sealed interface Type {
     // elem : int or real etc. size : size of the array
     record Array(Type elem, int size) implements Type {}
     // fields : each field name in a struct
-    record Struct(Map<String, Type> fields) implements Type {}
+    record Struct(LinkedHashMap<String, Type> fields) implements Type {}
     // unknown type
     record Error() implements Type {}
 

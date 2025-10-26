@@ -487,7 +487,7 @@ public final class SemanticAnalyzer {
                         er.semantic("Semantic: struct type missing name", tokenAt(t, TokenType.TIDEN));
                         continue;
                     }
-                    Map<String, Type> fields = new LinkedHashMap<>();
+                    LinkedHashMap<String, Type> fields = new LinkedHashMap<>();
                     StNode flist = firstChild(t, StNodeKind.NFLIST);
                     if (flist != null) {
                         for (StNode sd : flist.children()) {

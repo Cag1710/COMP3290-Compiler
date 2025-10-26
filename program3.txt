@@ -24,7 +24,7 @@ func sumArr (arr : ArrayType) : integer
     i : integer
 begin
     for (i = 0; i <= 10)
-        sum += arr[i].x;
+        sum += arr[i].val;
     end
 
     return sum;

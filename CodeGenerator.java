@@ -52,7 +52,74 @@ public class CodeGenerator {
     }
 
     private void genFuncs(StNode root) {
+        for (StNode f : root.children()) {
+            genFunc(f);
+        }
+    }
+
+    private void genFunc(StNode f) {
+        // function name
+        String name = f.lexeme;
+        em.label(name);
+
+        // function locals
+        int localCount = 0;
+        StNode locals = f.getChild(StNodeKind.NDLIST);
+        if (locals != null) {
+            for (StNode d : locals.children()) {
+                Symbol sym = d.getSymbol();
+                if (sym instanceof VarSymbol v) {
+                    localCount += Math.max(1, v.sizeWords());
+                } else {
+                    localCount += 1;
+                }
+            }
+        }
+
+        if (localCount > 0) {
+            em.emit("ALLOC", localCount);
+        }
         
+        // function body
+        StNode stats = f.getChild(StNodeKind.NSTATS);
+        if (stats != null) {
+            for (StNode s : stats.children()) {
+                genStatement(s);
+            }
+        }
+        em.emit("RETN");
+    }
+
+    private void genCallCommon(String fn, List<StNode> args) {
+        for (StNode a : args) {
+            genExpression(a);
+        }
+
+        em.emit("LB", args.size()); // param count
+        em.emit("LA_LABEL", fn); // address of label
+        em.emit("JS2"); // perform call
+    }
+
+    private void gennFCall(StNode call) {
+
+        String fn = call.lexeme; // name
+        List<StNode> args = call.children(); // params
+        genCallCommon(fn, args);
+    }
+
+    private void genCallStmt(StNode call) {
+        String fn = call.lexeme; // name
+        List<StNode> args = call.children(); // params
+
+        Symbol s = table.resolve(fn);
+
+        if (s instanceof FuncSymbol fs && !(fs.returnType() instanceof Type.VoidT)) {
+            genCallCommon(fn, args);
+            em.emit("STEP");
+            return;
+        }
+
+        genCallCommon(fn, args);
     }
 
     private void genStatement(StNode stat) {
@@ -61,9 +128,7 @@ public class CodeGenerator {
             case NINPUT, NOUTP, NOUTL -> genIO(stat);
             case NFORL, NREPT, NIFTH, NIFTE -> genControls(stat);
             case NRETN -> genReturn(stat);
-            case NCALL -> {
-                // TODO: 
-            }
+            case NCALL -> genCallStmt(stat);
             default -> {}
         }
     }
@@ -186,7 +251,7 @@ public class CodeGenerator {
                 genArrayExpr(expr);
             }
             case NFCALL -> {
-                // genFnCall(expr);
+                gennFCall(expr);
             }
             case NEQL, NNEQ, NGRT, NLSS, NGEQ, NLEQ -> {
                 genExpression(expr.children().get(0)); // lhs
@@ -198,7 +263,7 @@ public class CodeGenerator {
                     case NGRT -> em.emit("GT");  
                     case NLSS -> em.emit("LT");  
                     case NGEQ -> em.emit("GE");  
-                    case NLEQ -> em.emit("LE"); 
+                    case NLEQ -> em.emit("LE");
                     default -> {}
                 }
             }
@@ -463,6 +528,10 @@ public class CodeGenerator {
     }
 
     private void genReturn(StNode n)  {
-
+        if (!n.children().isEmpty()) {
+            genExpression(n.children().get(0));
+            em.emit("RVAL");
+        }
+        em.emit("RETN");
     }
 }
